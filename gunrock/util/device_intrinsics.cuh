@@ -116,6 +116,20 @@ __device__ static __forceinline__ double atomicAdd(double *addr, double val)
     } while( assumed!=old );
     return old;
 }
+
+__device__ static __forceinline__ double atomicMul(double *addr, double val)
+{
+    double old = *addr, assumed;
+    do {
+        assumed = old;
+        old = __longlong_as_double(
+                atomicCAS((unsigned long long int*) addr,
+                __double_as_longlong(assumed),
+                __double_as_longlong(val * assumed))
+        );
+    } while ( assumed != old);
+    return old;
+}
 #endif
 
 __device__ static __forceinline__ long long atomicCAS(long long *addr, long long comp, long long val)
@@ -132,6 +146,13 @@ __device__ static __forceinline__ long long atomicAdd(long long *addr, long long
     return (long long)atomicAdd(
         (unsigned long long*)addr,
         (unsigned long long )val);
+}
+
+__device__ static __forceinline__ long long atomicMul(long long *addr, long long val)
+{
+    return (long long)atomicMul(
+            (unsigned long long *)addr,
+            (unsigned long long) val);
 }
 
 // TODO: only works if both *addr and val are non-negetive
