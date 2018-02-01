@@ -148,6 +148,10 @@ option(GUNROCK_APP_TOPK
   "If on, builds only TOPK application."
   OFF)
 
+option(GUNROCK_APP_BP
+  "If on, builds only BP application."
+  OFF)
+
 #option(GUNROCK_APP_SAMPLE
 #  "If on, builds only SAMPLE application."
 #  OFF)
@@ -275,6 +279,7 @@ if(GUNROCK_BUILD_APPLICATIONS)
   add_subdirectory(tests/salsa)
   add_subdirectory(tests/wtf)
   add_subdirectory(tests/topk)
+  add_subdirectory(tests/bp)
   #add_subdirectory(tests/template)
   #add_subdirectory(tests/vis)
   #add_subdirectory(tests/mis)
@@ -316,6 +321,7 @@ else(GUNROCK_BUILD_APPLICATIONS)
   if(GUNROCK_APP_TOPK)
     add_subdirectory(tests/topk)
   endif(GUNROCK_APP_TOPK)
+
 
   # if(GUNROCK_APP_SAMPLE)
   #   add_subdirectory(tests/sample)

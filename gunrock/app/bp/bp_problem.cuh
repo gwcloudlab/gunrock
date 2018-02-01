@@ -353,7 +353,7 @@ namespace gunrock {
                  *
                  * @return cudaError_t object Indicates the success of all CUDA calls
                  */
-                cudaError_t Extract(Value *h_belief, VertexId *h_node_id)
+                cudaError_t Extract(util::Array1D<Value> *h_belief, VertexId *h_node_id)
                 {
                     cudaError_t retval = cudaSuccess;
 

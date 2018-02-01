@@ -1392,6 +1392,23 @@ namespace gunrock {
                 return cudaErrorInvalidDeviceFunction;
             }
 
+            cudaError_t Reset(std::string traversal_mode = "LB") {
+                if (this->min_sm_version >= 300)
+                {
+                    if (traversal_mode == "LB") {
+                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
+                    }
+                    else if (traversal_mode == "LB_LIGHT")
+                    {
+                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
+                    }
+                    else if (traversal_mode == "TWC")
+                    {
+                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
+                    }
+                }
+            }
+
             /**
              * @brief BP Enact kernel entry
              *
