@@ -232,7 +232,7 @@ void dispatchBP(
                         }
                         case VALUE_BELIEF:
                         {
-                            Csr<int, int, int> csr(false);
+                            Csr<int, int, struct Belief> csr(false);
                             csr.nodes = graphi->num_nodes;
                             csr.edges = graphi->num_edges;
                             csr.row_offsets = (int*)graphi->row_offsets;
