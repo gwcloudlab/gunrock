@@ -314,6 +314,8 @@ void bp(
         const int num_edges,
         const int *row_offsets,
         const int *col_indices,
+        const struct Belief *node_values,
+        const struct Belief *edges_values,
         bool normalized
 )
 {
@@ -332,6 +334,8 @@ void bp(
     graphi->num_edges = num_edges;
     graphi->row_offsets = (void *)&row_offsets[0];
     graphi->col_indices = (void *)&col_indices[0];
+    graphi->node_value1 = (void *)&node_values[0];
+    graphi->edge_values = (void *)&edges_values[0];
 
     gunrock_bp(grapho, graphi, config, data_t);
     memcpy(beliefs, (struct Belief *)grapho->node_value1, num_nodes * sizeof(struct Belief));

@@ -400,6 +400,8 @@ void bp(
         const int num_edges, // Input graph number of edges
         const int* row_offsets, // Input graph row_offsets
         const int* col_indices, // Input graph col_indices
+        const struct Belief *node_values, // Input graph node beliefs,
+        const struct Belief *edge_values, // Input graph edge joint probabilities
         bool normalized // normalized bp flag
 );
 
