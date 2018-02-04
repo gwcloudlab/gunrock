@@ -14,6 +14,35 @@
 namespace gunrock {
     namespace app {
         namespace bp {
+            template <typename SizeT, typename Value>
+            __global__ void Assign_Init_Value_Kernel(
+                    SizeT num_elements,
+                    Value init_belief,
+                    Value *d_belief_current
+            )
+            {
+                SizeT x = (SizeT)(blockIdx.x * blockDim.x + threadIdx.x);
+                const SizeT STRIDE = (SizeT)(blockDim.x * gridDim.x);
+
+                int num_beliefs_init = init_belief.num_beliefs_x;
+
+                while (x < num_elements) {
+                    for(int y = 0; y < num_beliefs_init; y++) {
+                        d_belief_current[x].states[y][0] = init_belief.states[y][0];
+                    }
+
+                    x += STRIDE;
+                }
+            };
+
+            /**
+             * @brief Belief propagation structure stores device-side vectors for doing BP on the GPU
+             *
+             * @tparam VertexId Type of signed integer to use as vertex id
+             * @tparam SizeT Type of unsigned int to use for array indexing
+             * @tparam Value Type of belief to use for computing beliefs
+             */
+            template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
             struct BPProblem : ProblemBase<VertextId, SizeT, Value,
                     true, // _MARK_PREDECESSORS
                     false> // _ENABLE IDEMPOTENCE
@@ -39,15 +68,15 @@ namespace gunrock {
                  * @brief Data slice structure which contains BP problem specific data.
                  */
                 struct DataSlice : BaseDataSlice {
-                    util::Array1D<SizeT, util::Array1D<SizeT, Value>> belief_curr;
-                    util::Array1D<SizeT, util::Array1D<SizeT, Value>> belief_next;
-                    util::Array1D<SizeT, util::Array1D<SizeT, Value>> joint_probabilities;
+                    util::Array1D<SizeT, Value> belief_curr;
+                    util::Array1D<SizeT, Value> belief_next;
+                    util::Array1D<SizeT, Value> joint_probabilities;
                     util::Array1D<SizeT, VertexId> node_ids;
                     util::Array1D<SizeT, VertexId> local_vertices;
                     util::Array1D<SizeT, VertexId> *remote_vertices_out;
                     util::Array1D<SizeT, VertexId> *remote_vertices_in;
-                    Value threshold;
-                    Value delta;
+                    float threshold;
+                    float delta;
                     SizeT max_iter;
                     SizeT num_updated_vertices;
                     DataSlice *d_data_slice;
@@ -353,7 +382,7 @@ namespace gunrock {
                  *
                  * @return cudaError_t object Indicates the success of all CUDA calls
                  */
-                cudaError_t Extract(util::Array1D<Value> *h_belief, VertexId *h_node_id)
+                cudaError_t Extract(Value *h_belief, VertexId *h_node_id)
                 {
                     cudaError_t retval = cudaSuccess;
 

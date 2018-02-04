@@ -19,6 +19,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifndef MAX_STATES
+#define MAX_STATES 10
+#endif
+
 /**
  * @brief VertexId data type enumerators.
  */
@@ -43,6 +47,7 @@ enum ValueType
     VALUE_INT,    // Integer
     VALUE_UINT,   // Unsigned integer
     VALUE_FLOAT,  // Float
+    VALUE_BELIEF,  // Belief
 };
 
 /**
@@ -84,6 +89,16 @@ enum SrcMode
     randomize,       // Random generate source node
     largest_degree,  // Largest-degree node as source
 };
+
+/**
+ * @brief Struct to hold belief state information
+ */
+struct Belief {
+    float states[MAX_STATES][MAX_STATES];
+    int num_states_x;
+    int num_states_y;
+};
+
 
 /**
  * @brief arguments configuration used to specify arguments.
@@ -351,6 +366,42 @@ void pagerank(
     const int* row_offsets,   // Input graph row_offsets
     const int* col_indices,   // Input graph col_indices
     bool       normalized);   // normalized pagerank flag
+
+/**
+ * @brief Belief propagation public interface
+ *
+ * @param[out] grapho Output data structure contains results.
+ * @param[in] graphi  Input data structrue contains graph.
+ * @param[in] config Primitive-specific configurations.
+ * @param[in] data_t Primitive-specific data type setting.
+ */
+void gunrock_bp(
+        struct GRGraph* grapho, // Output graph / results
+        const struct GRGraph* graphi, // Input graph structure
+        const struct GRSetup* config, // Flag configurations
+        const struct GRTypes data_t // Data type configurations
+);
+
+/**
+ * @brief Belief propagation simple public interface
+ *
+ * @param[out] node_ids Return updated belief node IDs
+ * @param[out] beliefs Return updated beliefs.
+ * @param[in] num_nodes Input graph number of nodes .
+ * @param[in] num_edges Input graph number of edges.
+ * @param[in] row_offsets Input graph row_offsets
+ * @param[in] col_indices Input graph col_indices
+ * @param[in] normalized Whether to perform a normalized Belief Propagation
+ */
+void bp(
+        int *node_ids, // Return updated belief node Ids
+        struct Belief *beliefs, // Return updated beliefs
+        const int num_nodes, // Input graph number of nodes
+        const int num_edges, // Input graph number of edges
+        const int* row_offsets, // Input graph row_offsets
+        const int* col_indices, // Input graph col_indices
+        bool normalized // normalized bp flag
+);
 
 // TODO Add other primitives
 

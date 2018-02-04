@@ -103,6 +103,12 @@ namespace gunrock {
                 typedef util::Array1D<SizeT, double> V4;
             };
 
+            template <>
+            struct Make4Vector<struct Belief>
+            {
+                typedef util::Array1D<SizeT, struct Belief> V4;
+            };
+
             template <
                     typename VertexId, typename SizeT, typename Value, typename Problem>
                     struct BPFunctor
@@ -162,17 +168,17 @@ namespace gunrock {
                             SizeT input_pos,
                             SizeT &output_pos
                         ){
-                            util::Array1D<SizeT, Value> src_belief = d_data_slice->belief_curr[s_id];
-                            util::Array1D<SizeT, Value> dest_belief = d_data_slice->belief_next[d_id];
-                            util::Array1D<SizeT, Value> joint_probability = d_data_slice->joint_probability[edge_id];
+                            Value src_belief = d_data_slice->belief_curr[s_id];
+                            Value dest_belief = d_data_slice->belief_next[d_id];
+                            Value joint_belief;
+                            util::io::ModifiedLoad<Problem::COLUMN_READ_MODIFIER>::Ld(joint_belief, d_data_slice->joint_probabilities + edge_id);
 
-                            for (int i = 0; i < src_belief.GetSize(); i++)
+                            for (int i = 0; i < src_belief.num_states_x; i++)
                             {
-                                for (int j = 0; j < dest_belief.GetSize(); j++) {
-                                    int prob_index = i * dest_belief.GetSize() + j;
-                                    Value mul_value = *(joint_probability.GetPointer(util::DEVICE) + prob_index) * *(src_belief.GetPointer(util::DEVICE) + i);
+                                for (int j = 0; j < dest_belief.num_states_x; j++) {
+                                    float mul_value = joint_belief.states[x][y] * src_belief.states[x][0];
                                     if (isfinite(mul_value)) {
-                                        Value old_value = atomicMul(dest_belief.GetPointer() + j, mul_value);
+                                        float old_value = atomicMul(&(dest_belief.states[j][0]), mul_value);
                                     }
                                 }
                             }
@@ -201,22 +207,22 @@ namespace gunrock {
                                 SizeT input_pos,
                                 SizeT output_pos
                         ) {
-                            util::Array1D raw_beliefs = d_data_slice->belief_next[node];
-                            util::Array1D curr_beliefs = d_data_slice->belief_curr[node];
+                            Value raw_beliefs = d_data_slice->belief_next[node];
+                            Value curr_beliefs = d_data_slice->belief_curr[node];
                             Value normalized_sum = 0.0;
                             Value next_sum = 0.0;
                             Value curr_sum = 0.0;
-                            for (int i = 0; i < raw_beliefs.GetSize(); i++) {
-                                normalized_sum += *(raw_beliefs.GetPointer(util::DEVICE) + i);
+                            for (int i = 0; i < raw_beliefs.num_states_x; i++) {
+                                normalized_sum += *raw_beliefs.states[i][0];
                             }
-                            for (int i = 0; i < raw_beliefs.GetSize(); i++) {
-                                Value normalized_value = *(raw_beliefs.GetPointer(util::DEVICE) + i) / normalized_sum;
+                            for (int i = 0; i < raw_beliefs.num_states_x; i++) {
+                                float normalized_value = raw_beliefs.states[i][0] / normalized_sum;
                                 if (!isfinite(normalized_value)) {
                                     normalized_value = 0.0;
                                 }
-                                *(raw_beliefs.GetPointer(util::DEVICE) + i) = normalized_value;
+                                raw_beliefs,states[i][0] = normalized_value;
                                 next_sum += normalized_value;
-                                curr_sum += *(curr_beliefs.GetPointer(util::DEVICE) + i);
+                                curr_sum += curr_beliefs.states[i][0];
                             }
                             return (fabs(next_sum - curr_sum) > (d_data_slice->threshold * curr_sum));
                         }

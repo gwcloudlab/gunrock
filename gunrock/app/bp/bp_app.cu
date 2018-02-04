@@ -91,21 +91,23 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
     double max_queue_sizing = parameter->max_queue_sizing;
     double max_in_sizing = parameter->max_in_sizing;
     ContextPtr *context = (ContextPtr *)parameter->context;
-    std::string paratition_method = parameter->partition_method;
+    std::string partition_method = parameter->partition_method;
     int *gpu_idx = parameter->gpu_idx;
     cudaStream_t *streams = parameter->streams;
     float partition_factor = parameter->partition_factor;
-    int partition_seed = paratition->partition_seed;
+    int partition_seed = parameter->partition_seed;
     bool g_stream_from_host = parameter->g_stream_from_host;
+    VertexId src = parameter->src[0];
     Value delta = parameter->delta;
     Value error = parameter->error;
     SizeT max_iter = parameter->max_iter;
     std::string traversal_mode = parameter->traversal_mode;
     bool instrument = parameter->instrumented;
+    bool size_check = parameter->size_check;
     bool debug = parameter->debug;
     size_t *org_size = new size_t[num_gpus];
 
-    util::Array1D<Value> *h_beliefs = new util::Array1D[graph->nodes];
+    Value *h_beliefs = new Value[graph->nodes];
     VertexId *h_node_id = new VertexId[graph->nodes];
 
     for (int gpu = 0; gpu < num_gpus; gpu++)
@@ -123,7 +125,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
                     NULL,
                     num_gpus,
                     gpu_idx,
-                    paratition_method,
+                    partition_method,
                     streams,
                     context,
                     max_queue_sizing,
@@ -142,7 +144,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             "BP Enactor Init failed", __FILE__, __LINE__
     );
 
-    CputTimer cpu_timer;
+    CpuTimer cpu_timer;
 
     util::GRError(
             problem->Reset(src, delta, error, max_iter,
@@ -168,7 +170,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             "BP Problem Data Extraction Failed", __FILE__, __LINE__
     );
 
-    output->node_value1 = (util::Array1D<Value>*)&h_beliefs[0];
+    output->node_value1 = (Value*)&h_beliefs[0];
     output->node_value2 = (VertexId *)&h_node_id[0];
 
     if (!quiet){
@@ -225,6 +227,11 @@ void dispatchBP(
                         }
                         case VALUE_FLOAT:
                         {
+                            printf("Not Yet Support For This DataType Combination.\n");
+                            break;
+                        }
+                        case VALUE_BELIEF:
+                        {
                             Csr<int, int, int> csr(false);
                             csr.nodes = graphi->num_nodes;
                             csr.edges = graphi->num_edges;
@@ -232,7 +239,7 @@ void dispatchBP(
                             csr.column_indices = (int*)graphi->col_indices;
                             parameter->graph = &csr;
 
-                            normalizedBP<int, int, float>(grapho, parameter);
+                            normalizedBP<int, int, struct Belief>(grapho, parameter);
 
                             // rest for free memory
                             csr.row_offsets = NULL;
@@ -302,7 +309,7 @@ void gunrock_bp(
 
 void bp(
         int *node_ids,
-        util::Array1D<float> *beliefs,
+        struct Belief *beliefs,
         const int num_nodes,
         const int num_edges,
         const int *row_offsets,
@@ -310,10 +317,10 @@ void bp(
         bool normalized
 )
 {
-    struct GPTypes data_t;
+    struct GRTypes data_t;
     data_t.VTXID_TYPE = VTXID_INT;
     data_t.SIZET_TYPE = SIZET_INT;
-    data_t.VALUE_TYPE = VALUE_FLOAT;
+    data_t.VALUE_TYPE = VALUE_BELIEF;
 
     struct GRSetup *config = InitSetup(1, NULL); // primitive-specific configures
     config->bp_normalized = normalized;
@@ -327,7 +334,7 @@ void bp(
     graphi->col_indices = (void *)&col_indices[0];
 
     gunrock_bp(grapho, graphi, config, data_t);
-    memcpy(beliefs, (util::Array1D<float> *)grapho->node_value1, num_nodes * sizeof(util::Array1D));
+    memcpy(beliefs, (struct Belief *)grapho->node_value1, num_nodes * sizeof(struct Belief));
     memcpy(node_ids, (int *)grapho->node_value2, num_nodes * sizeof(int));
 
     if (graphi) {
