@@ -117,19 +117,6 @@ __device__ static __forceinline__ double atomicAdd(double *addr, double val)
     return old;
 }
 
-__device__ static __forceinline__ double atomicMul(double *addr, double val)
-{
-    double old = *addr, assumed;
-    do {
-        assumed = old;
-        old = __longlong_as_double(
-                atomicCAS((unsigned long long int*) addr,
-                __double_as_longlong(assumed),
-                __double_as_longlong(val * assumed))
-        );
-    } while ( assumed != old);
-    return old;
-}
 #endif
 
 __device__ static __forceinline__ long long atomicCAS(long long *addr, long long comp, long long val)
@@ -148,12 +135,20 @@ __device__ static __forceinline__ long long atomicAdd(long long *addr, long long
         (unsigned long long )val);
 }
 
-__device__ static __forceinline__ long long atomicMul(long long *addr, long long val)
+__device__ static __forceinline__ float atomicMul(float *address, float val)
 {
-    return (long long)atomicMul(
-            (unsigned long long *)addr,
-            (unsigned long long) val);
+    int *address_as_int = (int*)address;
+    int old = *address_as_int, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_int, assumed, __float_as_int(
+                val * __float_as_int(assumed)
+        ));
+    } while (assumed != old);
+    return __int_as_float(old);
 }
+
+
 
 // TODO: only works if both *addr and val are non-negetive
 __device__ static __forceinline__ long long atomicMin_(long long* addr, long long val)
@@ -261,6 +256,7 @@ struct AtomicInt<T, 4>
     {
         return atomicAdd((unsigned int *) ptr, (unsigned int) val);
     }
+
 };
 
 template <typename T>
@@ -270,6 +266,7 @@ struct AtomicInt<T, 8>
     {
         return atomicAdd((unsigned long long int *) ptr, (unsigned long long int) val);
     }
+
 };
 
 // From Andrew Davidson's dStepping SSSP GPU implementation

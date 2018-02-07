@@ -41,7 +41,6 @@ namespace gunrock {
                 while (x < num_elements) {
                     VertexId key = keys[x];
                     if (markers[key] == 1) {
-                        Value *curr_ptr, *next_ptr;
                         float **curr_states, **next_states;
                         // Assume belief struct
                         const int curr_num_beliefs = belief_curr[key]->num_states_x;
@@ -136,13 +135,11 @@ namespace gunrock {
                 while (x < num_elements)
                 {
                     VertexId key = d_keys[x];
-                    float **in_values = d_belief_in[x].states;
-                    float **out_values = d_belief_out[x].states;
                     const int num_states = d_belief_in[x].num_states_x;
                     for (int y = 0; y < num_states; y++)
                     {
-                        float *mul_value_ptr = &(in_values[y][0]);
-                        float *out_value_ptr = &(out_values[key + y][0]);
+                        float *mul_value_ptr = &(d_belief_in[x].states[y][0]);
+                        float *out_value_ptr = &(d_belief_out[x].states[key + y][0]);
                         float old_value = atomicMul(out_value_ptr, *mul_value_ptr);
                     }
                     x += STRIDE;
@@ -248,7 +245,7 @@ namespace gunrock {
                 }
             };
 
-            template<typename VertexId, SizeT, Value>
+            template<typename VertexId, typename SizeT, typename Value>
             __global__ void Assign_Final_Value_Kernel(
                     SizeT nuM_elements,
                     VertexId *d_local_vertices,
@@ -298,7 +295,7 @@ namespace gunrock {
                 typedef typename Enactor::Problem Problem;
                 typedef typename Problem::DataSlice DataSlice;
                 typedef GraphSlice<VertexId, SizeT, Value> GraphSliceT;
-                typedef BPFunctor<VertexId, Size, Value, Problem> BpFunctor;
+                typedef BPFunctor<VertexId, SizeT, Value, Problem> BpFunctor;
                 typedef BPMarkerFunctor<VertexId, SizeT, Value, Problem> BpMarkerFunctor;
                 typedef typename util::DoubleBuffer<VertexId, SizeT, Value> Frontier;
                 typedef IterationBase <AdvanceKernelPolicy, FilterKernelPolicy, Enactor,
@@ -347,10 +344,11 @@ namespace gunrock {
                             util::cpu_mt::PrintMessage("Filter start.",
                             thread_num, enactor_stats->iteration, peer_);
 
-                            gunrock::oprtr::filter::LaunchKernel<FilterKernelPolicy, Problem, BpFunctor>(
+                            gunrock::oprtr::filter::LaunchKernel
+                            <FilterKernelPolicy, Problem, BpFunctor>(
                                     enactor_stats[0],
                                     frontier_attribute[0],
-                                    typename BPFunctor::LabelT(),
+                                    typename BpFunctor::LabelT(),
                                     data_slice,
                                     d_data_slice,
                                     NULL,
@@ -383,16 +381,17 @@ namespace gunrock {
                                 return;
                             }
 
-                            util::MemsetKernel<<<240, 512, 0, stream>>>(
+                            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
+                                    data_slice->belief_curr.GetPointer(util::DEVICE),
                                     data_slice->belief_next.GetPointer(util::DEVICE),
-                                    NULL, graph_slice->nodes
+                                    data_slice->nodes
                             );
 
                             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream),
                             "cudaStreamSynchronize failed", __FILE__, __LINE__)) {
                                 return;
                             }
-                            data_slice->num_update_vertices = frontier_attribute->queue_length;
+                            data_slice->num_updated_vertices = frontier_attribute->queue_length;
                         }
 
                         frontier_attribute->queue_length = data_slice->local_vertices.GetSize();
@@ -405,11 +404,11 @@ namespace gunrock {
 
                         // Edge Map
                         frontier_attribute->queue_reset = false;
-                        gunrock::oprtr::LaunchKernel<AdvanceKernelPolicy, Problem, BpFunctor,
+                        gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, BpFunctor,
                                 gunrock::oprtr::advance::V2V>(
                             enactor_stats[0],
                             frontier_attribute[0],
-                            typename BPFunctor::LabelT(),
+                            typename BpFunctor::LabelT(),
                             data_slice,
                             d_data_slice,
                             (VertexId*)NULL,
@@ -508,7 +507,7 @@ namespace gunrock {
                             array,
                             data_slice->markers.GetPointer(util::DEVICE));
                     num_elements = 0;
-                };
+                }
 
                 template <int NUM_VERTEX_ASSOCIATES, int NUM_VALUE__ASSOCIATES>
                 static void Expand_Incoming(
@@ -534,13 +533,13 @@ namespace gunrock {
                     }
                     Expand_Incoming_BP_Kernel<AdvanceKernelPolicy, NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES>
                     <<<num_blocks, AdvanceKernelPolicy::THREADS, 0, stream>>>
-                    (h_data_slice->gpu_dx,
+                    (h_data_slice->gpu_idx,
                     h_data_slice->in_counters[peer_],
                     h_data_slice->remote_vertices_in[peer_].GetPointer(util::DEVICE),
                     value__associate_in.GetPointer(util::DEVICE),
                     h_data_slice->belief_next.GetPointer(util::DEVICE)
                     );
-                };
+                }
 
                 /**
                  * @brief Iteration_Update_Preds function.
@@ -618,7 +617,7 @@ namespace gunrock {
                                 data_slice->value__associate_outs[peer_]
                         );
                     }
-                };
+                }
 
                 /**
                  * @brief Stop_Condition check function.
@@ -760,7 +759,7 @@ namespace gunrock {
                                 }
                             }
                             data_slice[0]->keys_outs[peer_] = data_slice[0]->keys_out[peer_].GetPointer(util::DEVICE);
-                            data_slice[0]->value__associate_outs[peer][0] = data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE);
+                            data_slice[0]->value__associate_outs[peer_][0] = data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE);
                             data_slice[0]->value__associate_outs[peer_].Move(util::HOST, util::DEVICE, -1, 0, stream);
 
                             Assign_Keys_BP<VertexId , SizeT>
@@ -791,7 +790,7 @@ namespace gunrock {
                     if (enactor_stats->retval = cudaStreamSynchronize(stream)) {
                         return;
                     }
-                };
+                }
             };
 
             template<typename AdvanceKernelPolicy, typename FilterKernelPolicy, typename Enactor>
@@ -982,7 +981,7 @@ namespace gunrock {
                         }
                     }
                     return retval;
-                };
+                }
 
                 cudaError_t Extract() {
                     cudaError_t retval = cudaSuccess;
@@ -1002,11 +1001,11 @@ namespace gunrock {
                         if (num_blocks > 240) {
                             num_blocks = 240;
                         }
-                        Assign_Final_Value_Kernel << < num_blocks, 512, 0, data_slice->streams[0] >> > (
+                        Assign_Final_Value_Kernel <<< num_blocks, 512, 0, data_slice->streams[0] >>> (
                                 data_slice->local_vertices.GetSize(),
                                         data_slice->local_vertices.GetPointer(util::DEVICE),
                                         data_slice->belief_curr.GetPointer(util::DEVICE),
-                                        (thread_num == 0) ? (util::Array1D *) NULL
+                                        (thread_num == 0) ? (Value*) NULL
                                                           : data_slice->value__associate_out[1].GetPointer(util::DEVICE)
                         );
 
@@ -1041,7 +1040,7 @@ namespace gunrock {
                             data_slice->local_vertices.GetSize(),
                                     data_slice->local_vertices.GetPointer(util::DEVICE),
                                     data_slice->belief_curr.GetPointer(util::DEVICE),
-                                    (util::Array1D *) NULL
+                                    (Value*) NULL
                     );
 
                     for (int peer = 1; peer < this->num_gpus; peer++) {
@@ -1203,9 +1202,9 @@ namespace gunrock {
                         }
                     }
                     return retval;
-                };
+                }
 
-                template<AdvancedKernelPolicy, FilterKernelPolicy>
+                template<typename AdvancedKernelPolicy, typename FilterKernelPolicy>
                 cudaError_t EnactBP() {
                     cudaError_t retval = cudaSuccess;
                     for (int gpu = 0; gpu < this->num_gpus; gpu++) {
@@ -1229,7 +1228,7 @@ namespace gunrock {
                     }
 
                     return retval;
-                };
+                }
 
                 typedef gunrock::oprtr::filter::KernelPolicy<
                         Problem, // Problem data type
@@ -1341,7 +1340,7 @@ namespace gunrock {
 
                     static cudaError_t
                     Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512) {
-                        return enactor.InitBP<TWC_AdvnaceKernelPolicy, FilterKernelPolicy>
+                        return enactor.InitBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>
                                 (context, problem, max_grid_size);
                     }
 

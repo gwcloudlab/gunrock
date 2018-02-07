@@ -42,7 +42,7 @@ public:
 };
 
 
-template <typename VertexId, typename Value, bool NORMALIZED>
+template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
 void runBP(GRGraph *output, BP_Parameter *parameter);
 
 /**
@@ -60,11 +60,11 @@ void normalizedBP(GRGraph *output, BP_Parameter *parameter)
 {
     if (parameter->normalized)
     {
-        runBP<VertexId, SizeT, true> (output, parameter);
+        runBP<VertexId, SizeT, Value, true> (output, parameter);
     }
     else
     {
-        runBP<VertexId, SizeT, false> (output, parameter);
+        runBP<VertexId, SizeT, Value, false> (output, parameter);
     }
 };
 
@@ -98,8 +98,8 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
     int partition_seed = parameter->partition_seed;
     bool g_stream_from_host = parameter->g_stream_from_host;
     VertexId src = parameter->src[0];
-    Value delta = parameter->delta;
-    Value error = parameter->error;
+    float delta = parameter->delta;
+    float error = parameter->error;
     SizeT max_iter = parameter->max_iter;
     std::string traversal_mode = parameter->traversal_mode;
     bool instrument = parameter->instrumented;

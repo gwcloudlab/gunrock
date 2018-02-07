@@ -27,7 +27,7 @@ namespace gunrock {
             struct BPMarkerFunctor
             {
                 typedef typename Problem::DataSlice DataSlice;
-                typedef _LABELT LabelT;
+                typedef _LabelT LabelT;
 
                 /**
                  * @brief Forward Edge Mapping condition function. Check if the destination node has been claimed as someone else's child
@@ -88,25 +88,25 @@ namespace gunrock {
             template <typename T>
             struct Make4Vector
             {
-                typedef util::Array1D<SizeT, int> V4;
+                typedef int4 V4;
             };
 
             template <>
             struct Make4Vector<float>
             {
-                typedef util::Array1D<SizeT, float> V4;
+                typedef float4 V4;
             };
 
             template <>
             struct Make4Vector<double>
             {
-                typedef util::Array1D<SizeT, double> V4;
+                typedef double4 V4;
             };
 
             template <>
             struct Make4Vector<struct Belief>
             {
-                typedef util::Array1D<SizeT, struct Belief> V4;
+                typedef struct Belief V4;
             };
 
             template <
@@ -176,7 +176,7 @@ namespace gunrock {
                             for (int i = 0; i < src_belief.num_states_x; i++)
                             {
                                 for (int j = 0; j < dest_belief.num_states_x; j++) {
-                                    float mul_value = joint_belief.states[x][y] * src_belief.states[x][0];
+                                    float mul_value = joint_belief.states[i][j] * src_belief.states[i][0];
                                     if (isfinite(mul_value)) {
                                         float old_value = atomicMul(&(dest_belief.states[j][0]), mul_value);
                                     }
@@ -209,18 +209,18 @@ namespace gunrock {
                         ) {
                             Value raw_beliefs = d_data_slice->belief_next[node];
                             Value curr_beliefs = d_data_slice->belief_curr[node];
-                            Value normalized_sum = 0.0;
-                            Value next_sum = 0.0;
-                            Value curr_sum = 0.0;
+                            float normalized_sum = 0.0;
+                            float next_sum = 0.0;
+                            float curr_sum = 0.0;
                             for (int i = 0; i < raw_beliefs.num_states_x; i++) {
-                                normalized_sum += *raw_beliefs.states[i][0];
+                                normalized_sum += raw_beliefs.states[i][0];
                             }
                             for (int i = 0; i < raw_beliefs.num_states_x; i++) {
                                 float normalized_value = raw_beliefs.states[i][0] / normalized_sum;
                                 if (!isfinite(normalized_value)) {
                                     normalized_value = 0.0;
                                 }
-                                raw_beliefs,states[i][0] = normalized_value;
+                                raw_beliefs.states[i][0] = normalized_value;
                                 next_sum += normalized_value;
                                 curr_sum += curr_beliefs.states[i][0];
                             }

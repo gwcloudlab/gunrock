@@ -43,7 +43,7 @@ namespace gunrock {
              * @tparam Value Type of belief to use for computing beliefs
              */
             template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
-            struct BPProblem : ProblemBase<VertextId, SizeT, Value,
+            struct BPProblem : ProblemBase<VertexId, SizeT, Value,
                     true, // _MARK_PREDECESSORS
                     false> // _ENABLE IDEMPOTENCE
                     //false, // _USE_DOUBLE_BUFFER
@@ -68,262 +68,260 @@ namespace gunrock {
                  * @brief Data slice structure which contains BP problem specific data.
                  */
                 struct DataSlice : BaseDataSlice {
-                    util::Array1D<SizeT, Value> belief_curr;
-                    util::Array1D<SizeT, Value> belief_next;
-                    util::Array1D<SizeT, Value> joint_probabilities;
-                    util::Array1D<SizeT, VertexId> node_ids;
-                    util::Array1D<SizeT, VertexId> local_vertices;
-                    util::Array1D<SizeT, VertexId> *remote_vertices_out;
-                    util::Array1D<SizeT, VertexId> *remote_vertices_in;
+                    util::Array1D <SizeT, Value> belief_curr;
+                    util::Array1D <SizeT, Value> belief_next;
+                    util::Array1D <SizeT, Value> joint_probabilities;
+                    util::Array1D <SizeT, VertexId> node_ids;
+                    util::Array1D <SizeT, VertexId> local_vertices;
+                    util::Array1D <SizeT, VertexId> *remote_vertices_out;
+                    util::Array1D <SizeT, VertexId> *remote_vertices_in;
                     float threshold;
                     float delta;
+                    bool to_continue;
                     SizeT max_iter;
                     SizeT num_updated_vertices;
                     DataSlice *d_data_slice;
                     util::Array1D<int, SizeT> in_counters;
                     util::Array1D<int, SizeT> out_counters;
                     util::Array1D<SizeT, unsigned char> cub_sort_storage;
-                    util::Array1D<SizeT, VertexId> temp_vertex;
-                };
+                    util::Array1D <SizeT, VertexId> temp_vertex;
 
-                /**
-                 * @brief default constructor
-                 */
-                DataSlice() : BaseDataSlice(),
-                              threshold(0),
-                              delta(0),
-                              max_iter(0),
-                              num_updated_vertices(0),
-                              d_data_slice(NULL)
-                {
-                    belief_curr.SetName("belief_curr");
-                    belief_next.SetName("belief_next");
-                    joint_probabilities.SetName("joint_probabilities");
-                    node_ids.SetName("node_ids");
-                    local_vertices.SetName("local_vertices");
-                    in_counters.SetName("in_counters");
-                    out_counters.SetName("out_counters");
-                    cub_sort_storage.SetName("cub_sort_storage");
-                    temp_vertex.SetName("temp_vertex");
-                }
 
-                /**
-                 * @brief Default destructor
-                 */
-                virtual ~DataSlice()
-                {
-                    Release();
-                }
-
-                cudaError_t Release() {
-                    cudaError_t retval = cudaSuccess;
-                    if (retval = util::SetDevice(this->gpu_idx)) retval;
-                    if (retval = BaseDataSlice::Release()) return retval;
-                    if (retval = belief_curr.Release()) return retval;
-                    if (retval = belief_next.Release()) return retval;
-                    if (retval = joint_probabilties.Release()) return retval;
-                    if (retval = node_ids.Release()) return retval;
-                    if (retval = in_counters.Release()) return retval;
-                    if (retval = out_counters.Release()) return retval;
-                    if (retval = cub_sort_storage.Release()) return retval;
-                    if (retval = temp_vertex.Release()) return retval;
-
-                    if (remote_vertices_in != NULL) {
-                        for (int peer = 0; peer < this->num_gpus; peer++) {
-                            if (retval = remote_vertices_in[peer].Release()) return retval;
-                            delete[] remote_vertices_in;
-                            remote_vertices_in = NULL;
-                        }
+                    /**
+                     * @brief default constructor
+                     */
+                    DataSlice() : BaseDataSlice(),
+                                  threshold(0),
+                                  delta(0),
+                                  max_iter(0),
+                                  num_updated_vertices(0),
+                                  d_data_slice(NULL) {
+                        belief_curr.SetName("belief_curr");
+                        belief_next.SetName("belief_next");
+                        joint_probabilities.SetName("joint_probabilities");
+                        node_ids.SetName("node_ids");
+                        local_vertices.SetName("local_vertices");
+                        in_counters.SetName("in_counters");
+                        out_counters.SetName("out_counters");
+                        cub_sort_storage.SetName("cub_sort_storage");
+                        temp_vertex.SetName("temp_vertex");
                     }
 
-                    if (remote_vertices_out != NULL) {
-                        for (int peer = 0; peer < this->num_gpus; peer++)
-                        {
-                            if (retval = remote_vertices_out[peer].Release()) return retval;
-                            delete[] remote_vertices_out;
-                            remote_vertices_out = NULL;
-                        }
+                    /**
+                     * @brief Default destructor
+                     */
+                    virtual ~DataSlice() {
+                        Release();
                     }
 
-                    return retval;
-                }
+                    cudaError_t Release() {
+                        cudaError_t retval = cudaSuccess;
+                        if (retval = util::SetDevice(this->gpu_idx)) return retval;
+                        if (retval = BaseDataSlice::Release()) return retval;
+                        if (retval = belief_curr.Release()) return retval;
+                        if (retval = belief_next.Release()) return retval;
+                        if (retval = joint_probabilities.Release()) return retval;
+                        if (retval = node_ids.Release()) return retval;
+                        if (retval = in_counters.Release()) return retval;
+                        if (retval = out_counters.Release()) return retval;
+                        if (retval = cub_sort_storage.Release()) return retval;
+                        if (retval = temp_vertex.Release()) return retval;
 
-                /**
-                 * @brief initialization function
-                 *
-                 * @param[in] num_gpus Number of GPUs used
-                 * @param[in] gpu_idx GPU index used for testing
-                 * @param[in] use_double_buffer Whether to use double buffer
-                 * @param[in] graph Pointer to the graph we process on
-                 * @param[in] graph_slice Pointer to GraphSlice object
-                 * @param[in] num_in_nodes
-                 * @param[in] num_out_nodes
-                 * @param[in] queue_sizing Maximum queue sizing factor
-                 * @param[in] in_sizing
-                 *
-                 * @return cudaError_t object Indicates the success of all CUDA calls
-                 */
-                cudaError_t Init(
-                       int num_gpus,
-                       int gpu_idx,
-                       bool use_double_buffer,
-                       Csr<VertexId, SizeT, Value> *graph,
-                       GraphSlice<VertexId, SizeT, Value> *graph_slice,
-                       SizeT *num_in_nodes,
-                       SiztT *num_out_nodes,
-                       float queue_sizing = 2.0,
-                       float in_sizing = 1.0
-                )
-                {
-                    cudaError_t retval = cudaSuccess;
-                    SizeT nodes = graph->nodes;
-                    SizeT edges = graph->edges;
-                    if ( retval = BaseDetails::Init(
-                            num_gpus,
-                            gpu_idx,
-                            use_double_buffer,
-                            graph,
-                            num_in_nodes,
-                            num_out_nodes,
-                            in_sizing
-                    )){
+                        if (remote_vertices_in != NULL) {
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                if (retval = remote_vertices_in[peer].Release()) return retval;
+                                delete[]
+                                remote_vertices_in;
+                                remote_vertices_in = NULL;
+                            }
+                        }
+
+                        if (remote_vertices_out != NULL) {
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                if (retval = remote_vertices_out[peer].Release()) return retval;
+                                delete[]
+                                remote_vertices_out;
+                                remote_vertices_out = NULL;
+                            }
+                        }
+
                         return retval;
                     }
 
-                    // create SoA on device
-                    if (retval = belief_curr.Allocate(nodes, util::DEVICE)) return retval;
-                    if (retval = belief_next.Allocate(nodes, util::DEVICE)) return retval;
-                    if (retval = joint_probabilities.Allocate(edges, util::DEVICE)) return retval;
-
-                    // copy data over
-                    belief_curr.SetPointer(graph->node_values, graph->nodes, util::HOST);
-                    if (retval = belief_curr.Move(util::HOST, util::DEVICE)) return retval;
-                    belief_next.SetPointer(graph->node_values, graph->nodes, util::HOST);
-                    if (retval = belief_next.Move(util::HOST, util::DEVICE)) return retval;
-                    joint_probabilities.SetPointer(graph->edge_values, graph->edges, util::HOST);
-                    if (retval = joint_probabilities.Move(util::HOST, util::DEVICE)) return retval;
-
-                    if(this->num_gpus == 1)
+                    /**
+                     * @brief initialization function
+                     *
+                     * @param[in] num_gpus Number of GPUs used
+                     * @param[in] gpu_idx GPU index used for testing
+                     * @param[in] use_double_buffer Whether to use double buffer
+                     * @param[in] graph Pointer to the graph we process on
+                     * @param[in] graph_slice Pointer to GraphSlice object
+                     * @param[in] num_in_nodes
+                     * @param[in] num_out_nodes
+                     * @param[in] queue_sizing Maximum queue sizing factor
+                     * @param[in] in_sizing
+                     *
+                     * @return cudaError_t object Indicates the success of all CUDA calls
+                     */
+                    cudaError_t Init(
+                            int num_gpus,
+                            int gpu_idx,
+                            bool use_double_buffer,
+                            Csr <VertexId, SizeT, Value> *graph,
+                            GraphSlice <VertexId, SizeT, Value> *graph_slice,
+                            SizeT *num_in_nodes,
+                            SizeT *num_out_nodes,
+                            float queue_sizing = 2.0,
+                            float in_sizing = 1.0
+                    )
                     {
-                        if (retval = local_vertices.Allocate(nodes, util::DEVICE)) {
+                        cudaError_t retval = cudaSuccess;
+                        SizeT nodes = graph->nodes;
+                        SizeT edges = graph->edges;
+                        if (retval = BaseDataSlice::Init(
+                                num_gpus,
+                                gpu_idx,
+                                use_double_buffer,
+                                graph,
+                                num_in_nodes,
+                                num_out_nodes,
+                                in_sizing
+                        )) {
                             return retval;
                         }
-                        util::MemsetIdxKernel<<<128, 128>>>(local_vertices.GetPointer(util::DEVICE), nodes);
-                    }
-                    else {
-                        out_counters.Allocate(this->num_gpus, util::HOST);
-                        in_counters.Allocate(this->num_gpus, util::HOST);
-                        remote_vertices_out = new util::Array1D<SizeT, VertexId>[this->num_gpus];
-                        remote_vertices_in = new util::Array1D<SizeT, VertexId>[this->num_gpus];
-                        for (int peer = 0; peer < this->num_gpus; peer++) {
-                            out_counters[peer] = 0;
-                            remote_vertices_out[peer].SetName("remote_vertices_out[]");
-                            remote_vertices_in[peer].SetName("remote_vertices_in[]");
-                        }
 
-                        for (VertexId v = 0; v < graph->nodes; v++) {
-                            out_counters[graph_slice->partition_table[v]]++;
-                        }
+                        // create SoA on device
+                        if (retval = belief_curr.Allocate(nodes, util::DEVICE)) return retval;
+                        if (retval = belief_next.Allocate(nodes, util::DEVICE)) return retval;
+                        if (retval = joint_probabilities.Allocate(edges, util::DEVICE)) return retval;
 
-                        for (int peer = 0; peer < this->num_gpus; peer++) {
-                            if (retval = remote_vertices_out[peer].Allocate(
-                                    out_counters[peer], util::HOST | util::DEVICE
+                        // copy data over
+                        belief_curr.SetPointer(graph->node_values, graph->nodes, util::HOST);
+                        if (retval = belief_curr.Move(util::HOST, util::DEVICE)) return retval;
+                        belief_next.SetPointer(graph->node_values, graph->nodes, util::HOST);
+                        if (retval = belief_next.Move(util::HOST, util::DEVICE)) return retval;
+                        joint_probabilities.SetPointer(graph->edge_values, graph->edges, util::HOST);
+                        if (retval = joint_probabilities.Move(util::HOST, util::DEVICE)) return retval;
+
+                        if (this->num_gpus == 1) {
+                            if (retval = local_vertices.Allocate(nodes, util::DEVICE)) {
+                                return retval;
+                            }
+                            util::MemsetIdxKernel << < 128, 128 >> > (local_vertices.GetPointer(util::DEVICE), nodes);
+                        } else {
+                            out_counters.Allocate(this->num_gpus, util::HOST);
+                            in_counters.Allocate(this->num_gpus, util::HOST);
+                            remote_vertices_out = new
+                            util::Array1D<SizeT, VertexId>[this->num_gpus];
+                            remote_vertices_in = new
+                            util::Array1D<SizeT, VertexId>[this->num_gpus];
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                out_counters[peer] = 0;
+                                remote_vertices_out[peer].SetName("remote_vertices_out[]");
+                                remote_vertices_in[peer].SetName("remote_vertices_in[]");
+                            }
+
+                            for (VertexId v = 0; v < graph->nodes; v++) {
+                                out_counters[graph_slice->partition_table[v]]++;
+                            }
+
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                if (retval = remote_vertices_out[peer].Allocate(
+                                        out_counters[peer], util::HOST | util::DEVICE
+                                )) {
+                                    return retval;
+                                }
+                                out_counters[peer] = 0;
+                            }
+
+                            for (VertexId v = 0; v < graph->nodes; v++) {
+                                int target = graph_slice->partition_table[v];
+                                remote_vertices_out[target][out_counters[target]] = v;
+                                out_counters[target]++;
+                            }
+
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                if (retval = remote_vertices_out[peer].Move(util::HOST, util::DEVICE)) {
+                                    return retval;
+                                }
+                            }
+                            if (retval = local_vertices.SetPointer(
+                                    remote_vertices_out[0].GetPointer(util::HOST),
+                                    out_counters[0], util::HOST
                             )) {
                                 return retval;
                             }
-                            out_counters[peer] = 0;
-                        }
-
-                        for (VertexId v = 0; v < graph->nodes; v++) {
-                            int target = graph_slice->partition_table[v];
-                            remote_vertices_out[target][out_counters[target]] = v;
-                            out_counters[target]++;
-                        }
-
-                        for (int peer = 0; peer < this->num_gpus; peer++)
-                        {
-                            if (retval = remote_vertices_out[peer].Move(util::HOST, util::DEVICE))
-                            {
+                            if (retval = local_vertices.SetPointer(
+                                    remote_vertices_out[0].GetPointer(util::DEVICE),
+                                                                      out_counters[0], util::DEVICE
+                            )) {
                                 return retval;
                             }
                         }
-                        if (retval = local_vertices.SetPointer(
-                                remote_vertices_out[0].GetPointer(util::HOST),
-                                out_counters[0], util::HOST
-                        )){
-                            return retval;
-                        }
-                        if (retval = local_vertices.SetPointer(
-                                remote_vertices_out[0].getPointer(util::DEVICE,
-                                out_counters[0], util::DEVICE)
-                        )){
-                            return retval;
-                        }
-
-                        return retval;
-                    }
-                }
-
-                cudaError_t Reset(
-                        VertexId src,
-                        Value delta,
-                        Value threshold,
-                        SizeT max_iter,
-                        bool scaled,
-                        FrontierType frontier_type,
-                        Csr <VertexId, SizeT, Value> *org_graph,
-                        Csr <VertexId, Size, Value> *sub_graph,
-                        GraphSlice<VertexId, SizeT, Value> *graph_slice,
-                        double queue_sizing = 2.0,
-                        bool use_double_buffer = false,
-                        double queue_sizing1 = -1.0,
-                        bool skip_scanned_edges = false
-                )
-                {
-                    cudaError_t retval = cudaSuccess;
-                    if (retval = BaseDataSlice::Reset(
-                            frontier_type,
-                            grpah_slice,
-                            queue_sizing,
-                            use_double_buffer,
-                            queue_sizing1,
-                            skip_scanned_edges
-                    )) {
                         return retval;
                     }
 
-                    SizeT nodes = sub_graph->nodes;
-
-                    if (this->num_gpus > 1) {
-                        for (int peer = 0; peer < this->num_gpus; peer++)
-                        {
-                            if (retval = this->keys_out[peer].Release()) return retval;
-                            if (retval = this->keys_in[0][peer].Release()) return retval;
-                            if (retval = this->keys_in[1][peer].Release()) return retval;
+                    cudaError_t Reset(
+                            VertexId src,
+                            Value delta,
+                            Value threshold,
+                            SizeT max_iter,
+                            bool scaled,
+                            FrontierType frontier_type,
+                            Csr <VertexId, SizeT, Value> *org_graph,
+                            Csr <VertexId, SizeT, Value> *sub_graph,
+                            GraphSlice <VertexId, SizeT, Value> *graph_slice,
+                            double queue_sizing = 2.0,
+                            bool use_double_buffer = false,
+                            double queue_sizing1 = -1.0,
+                            bool skip_scanned_edges = false
+                    )
+                    {
+                        cudaError_t retval = cudaSuccess;
+                        if (retval = BaseDataSlice::Reset(
+                                frontier_type,
+                                graph_slice,
+                                queue_sizing,
+                                use_double_buffer,
+                                queue_sizing1,
+                                skip_scanned_edges
+                        )) {
+                            return retval;
                         }
-                    }
 
-                    if (belief_curr.GetPointer(util::DEVICE) == NULL) {
-                        if (retval = belief_curr.Allocate(nodes, util::DEVICE)) return retval;
-                    }
-                    if (belief_next.GetPointer(util::DEVICE == NULL)) {
-                        if (retval = belief_next.Allocate(nodes, util::DEVICE)) return retval;
-                    }
-                    if (joint_probabilities.GetPointer(util::DEVICE == NULL)) {
-                        if (retval = joint_probabilities.Allocate(edges, util::DEVICE)) return retval;
-                    }
+                        SizeT nodes = sub_graph->nodes;
+                        SizeT edges = sub_graph->edges;
 
-                    // no need to init values
+                        if (this->num_gpus > 1) {
+                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                                if (retval = this->keys_out[peer].Release()) return retval;
+                                if (retval = this->keys_in[0][peer].Release()) return retval;
+                                if (retval = this->keys_in[1][peer].Release()) return retval;
+                            }
+                        }
 
-                    this->delta = data;
-                    this->threshold = threshold;
-                    this->to_continue = true;
-                    this->max_iter = max_iter;
-                    this->final_event_set = false;
-                    this->num_updated_vertices = 1;
+                        if (belief_curr.GetPointer(util::DEVICE) == NULL) {
+                            if (retval = belief_curr.Allocate(nodes, util::DEVICE)) return retval;
+                        }
+                        if (belief_next.GetPointer(util::DEVICE) == NULL) {
+                            if (retval = belief_next.Allocate(nodes, util::DEVICE)) return retval;
+                        }
+                        if (joint_probabilities.GetPointer(util::DEVICE) == NULL) {
+                            if (retval = joint_probabilities.Allocate(edges, util::DEVICE)) return retval;
+                        }
 
-                    return retval;
-                }
+                        // no need to init values
+
+                        this->delta = delta;
+                        this->threshold = threshold;
+                        this->to_continue = true;
+                        this->max_iter = max_iter;
+                        this->final_event_set = false;
+                        this->num_updated_vertices = 1;
+
+                        return retval;
+                    }
+                };
 
                 // Members
 
@@ -420,7 +418,7 @@ namespace gunrock {
                         int num_gpus = 1,
                         int *gpu_idx = NULL,
                         std::string partition_method = "random",
-                        cudaStream_t *stream = NULL,
+                        cudaStream_t *streams = NULL,
                         ContextPtr *context = NULL,
                         float queue_sizing = 2.0f,
                         float in_sizing = 1.0f,
@@ -443,7 +441,7 @@ namespace gunrock {
                         return retval;
                     }
 
-                    data_slices = new util::Array1D<SizeT, DataSlice>(this->num_gpus);
+                    data_slices = new util::Array1D<SizeT, DataSlice>[this->num_gpus];
 
                     for (int gpu = 0; gpu < this->num_gpus; gpu++)
                     {
@@ -452,7 +450,7 @@ namespace gunrock {
                         if (retval = this->graph_slices[gpu]->out_degrees.Release()) return retval;
                         if (retval = this->graph_slices[gpu]->original_vertex.Release()) return retval;
                         if (retval = this->graph_slices[gpu]->convertion_table.Release()) return retval;
-                        if (retval = this->graph_slices[gpu].Allocate(1, util::DEVICE | util::HOST)) return retval;
+                        if (retval = data_slices[gpu].Allocate(1, util::DEVICE | util::HOST)) return retval;
                         DataSlice *data_slice_ = data_slices[gpu].GetPointer(util::HOST);
                         data_slice_->d_data_slice = data_slices[gpu].GetPointer(util::DEVICE);
                         data_slice_->streams.SetPointer(streams + gpu * num_gpus * 2, num_gpus * 2);
@@ -494,7 +492,7 @@ namespace gunrock {
                             } else {
                               data_slices[gpu]->remote_vertices_in[peer_].SetPointer(
                                       data_slices[peer]->remote_vertices_out[gpu_].GetPointer(util::HOST),
-                                      max(data_slices[peer]->remote_vertices_out[gpu_].GetSize,
+                                      max(data_slices[peer]->remote_vertices_out[gpu_].GetSize(),
                                       data_slices[peer]->local_vertices.GetSize()),
                                       util::HOST
                               );
@@ -528,18 +526,15 @@ namespace gunrock {
                     for (int gpu = 1; gpu < this->num_gpus; gpu++)
                     {
                         if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
-                        if (data_slices[gpu]->value__associate_out[1].GetPointer(util::DEVICE) == NULL)
+                        if (data_slices[gpu] -> value__associate_out[1].GetPointer(util::DEVICE) == NULL)
                         {
-                            if (retval = data_slices[gpu]->value_associate_out[1].Allocate(
-                                    data_slices[gpu]->local_vertices.GetSize(), util::DEVICE
-                            )) {
+                            if (retval = data_slices[gpu] -> value__associate_out[1].Allocate(
+                                    data_slices[gpu] -> local_vertices.GetSize(), util::DEVICE)) {
                                 return retval;
                             }
-                        }
-                        else {
-                            if (retval = data_slices[gpu]->value__associate_out[1].EnsureSize(
-                                    data_slices[gpu]->local_vertices.GetSize()
-                            )) {
+                        } else {
+                            if (retval = data_slices[gpu] -> value__associate_out[1].EnsureSize(
+                                    data_slices[gpu] -> local_vertices.GetSize())) {
                                 return retval;
                             }
                         }

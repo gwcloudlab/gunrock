@@ -74,8 +74,8 @@ struct Csr
         edges = 0;
         average_degree = 0;
         stddev_degree = 0.0f;
-        average_edge_value = 0;
-        average_node_value = 0;
+        //average_edge_value = 0;
+        //average_node_value = 0;
         out_nodes = -1;
         row_offsets = NULL;
         column_indices = NULL;
