@@ -27,7 +27,7 @@ namespace gunrock {
             struct BPMarkerFunctor
             {
                 typedef typename Problem::DataSlice DataSlice;
-                typedef _LABELT LabelT;
+                typedef _LabelT LabelT;
 
                 /**
                  * @brief Forward Edge Mapping condition function. Check if the destination node has been claimed as someone else's child
@@ -88,20 +88,21 @@ namespace gunrock {
             template <typename T>
             struct Make4Vector
             {
-                typedef util::Array1D<SizeT, int> V4;
+                typedef int4 V4;
             };
 
             template <>
             struct Make4Vector<float>
             {
-                typedef util::Array1D<SizeT, float> V4;
+                typedef float4 V4;
             };
 
             template <>
             struct Make4Vector<double>
             {
-                typedef util::Array1D<SizeT, double> V4;
+                typedef double4 V4;
             };
+
 
             template <
                     typename VertexId, typename SizeT, typename Value, typename Problem>
@@ -162,19 +163,13 @@ namespace gunrock {
                             SizeT input_pos,
                             SizeT &output_pos
                         ){
-                            util::Array1D<SizeT, Value> src_belief = d_data_slice->belief_curr[s_id];
-                            util::Array1D<SizeT, Value> dest_belief = d_data_slice->belief_next[d_id];
-                            util::Array1D<SizeT, Value> joint_probability = d_data_slice->joint_probability[edge_id];
+                            Value src_belief = d_data_slice->belief_curr[s_id];
+                            Value joint_belief;
+                            util::io::ModifiedLoad<Problem::COLUMN_READ_MODIFIER>::Ld(joint_belief, d_data_slice->joint_probabilities + edge_id);
 
-                            for (int i = 0; i < src_belief.GetSize(); i++)
-                            {
-                                for (int j = 0; j < dest_belief.GetSize(); j++) {
-                                    int prob_index = i * dest_belief.GetSize() + j;
-                                    Value mul_value = *(joint_probability.GetPointer(util::DEVICE) + prob_index) * *(src_belief.GetPointer(util::DEVICE) + i);
-                                    if (isfinite(mul_value)) {
-                                        Value old_value = atomicMul(dest_belief.GetPointer() + j, mul_value);
-                                    }
-                                }
+                            float mul_value = joint_belief * src_belief;
+                            if (isfinite(mul_value)) {
+                                float old_value = atomicMul(d_data_slice->belief_next + d_id, mul_value);
                             }
                         }
 
@@ -201,24 +196,13 @@ namespace gunrock {
                                 SizeT input_pos,
                                 SizeT output_pos
                         ) {
-                            util::Array1D raw_beliefs = d_data_slice->belief_next[node];
-                            util::Array1D curr_beliefs = d_data_slice->belief_curr[node];
-                            Value normalized_sum = 0.0;
-                            Value next_sum = 0.0;
-                            Value curr_sum = 0.0;
-                            for (int i = 0; i < raw_beliefs.GetSize(); i++) {
-                                normalized_sum += *(raw_beliefs.GetPointer(util::DEVICE) + i);
+                            Value new_beliefs = d_data_slice->belief_next[node];
+                            Value curr_beliefs = d_data_slice->belief_curr[node];
+                            if (!isfinite(new_beliefs)) {
+                                new_beliefs = 0;
                             }
-                            for (int i = 0; i < raw_beliefs.GetSize(); i++) {
-                                Value normalized_value = *(raw_beliefs.GetPointer(util::DEVICE) + i) / normalized_sum;
-                                if (!isfinite(normalized_value)) {
-                                    normalized_value = 0.0;
-                                }
-                                *(raw_beliefs.GetPointer(util::DEVICE) + i) = normalized_value;
-                                next_sum += normalized_value;
-                                curr_sum += *(curr_beliefs.GetPointer(util::DEVICE) + i);
-                            }
-                            return (fabs(next_sum - curr_sum) > (d_data_slice->threshold * curr_sum));
+                            d_data_slice->belief_curr[node] = new_beliefs;
+                            return (fabs(new_beliefs - curr_beliefs) > (d_data_slice->threshold * curr_beliefs));
                         }
 
                         /**

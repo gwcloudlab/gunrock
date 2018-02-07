@@ -13,6 +13,9 @@ target_link_libraries(shared_lib_cc gunrock)
 add_executable(shared_lib_pr shared_lib_pr.c)
 target_link_libraries(shared_lib_pr gunrock)
 
+add_executable(shared_lib_bp shared_lib_bp.c)
+target_link_libraries(shared_lib_bp gunrock)
+
 add_executable(shared_lib_sssp shared_lib_sssp.c)
 target_link_libraries(shared_lib_sssp gunrock)
 

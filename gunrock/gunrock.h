@@ -354,6 +354,43 @@ void pagerank(
 
 // TODO Add other primitives
 
+/**
+ * @brief Belief propagation public interface
+ *
+ * @param[out] grapho Output data structure contains results.
+ * @param[in] graphi Input data structure contains graph.
+ * @param[in] config Primitive-specific configurations.
+ * @param[in] data_t Primitive-specific data type setting.
+ */
+void gunrock_bp(
+        struct GRGraph* grapho, // Output graph / results
+        const struct GRGraph* graphi, // Input graph structure
+        const struct GRSetup* config, // Flag configurations
+        const struct GRTypes data_t);
+
+/**
+ * @brief Belief propagation simple public interface
+ *
+ * @param[out] final_beliefs Return computed beliefs
+ * @param[in] num_nodes Input graph number of nodes
+ * @param[in] num_edges Input graph number of edges
+ * @param[in] row_offsets Input graph row_offsets
+ * @param[in] col_indices Input graph col_indices
+ * @param[in] original_beliefs Input graph original beliefs
+ * @param[in] joint_probabilities Input graph joint probabilities
+ * @param[in] normalized Whether to perform a normalized belief propagation
+ */
+void bp(
+        float *final_beliefs, // Return converged beliefs
+        const int num_nodes, // Input graph number of nodes
+        const int num_edges, // Input graph number of edges
+        const int *row_offsets, // Input graph row_offsets
+        const int *col_indices, // Input graph col_indices
+        const float *original_beliefs, // Input node beliefs
+        const float *joint_probabilities, // Input edge joint probabilities
+        bool normalized // normalized belief propagation flag
+);
+
 #ifdef __cplusplus
 }
 #endif

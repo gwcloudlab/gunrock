@@ -42,7 +42,7 @@ public:
 };
 
 
-template <typename VertexId, typename Value, bool NORMALIZED>
+template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
 void runBP(GRGraph *output, BP_Parameter *parameter);
 
 /**
@@ -60,11 +60,11 @@ void normalizedBP(GRGraph *output, BP_Parameter *parameter)
 {
     if (parameter->normalized)
     {
-        runBP<VertexId, SizeT, true> (output, parameter);
+        runBP<VertexId, SizeT, Value, true> (output, parameter);
     }
     else
     {
-        runBP<VertexId, SizeT, false> (output, parameter);
+        runBP<VertexId, SizeT, Value, false> (output, parameter);
     }
 };
 
@@ -91,21 +91,24 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
     double max_queue_sizing = parameter->max_queue_sizing;
     double max_in_sizing = parameter->max_in_sizing;
     ContextPtr *context = (ContextPtr *)parameter->context;
-    std::string paratition_method = parameter->partition_method;
+    std::string partition_method = parameter->partition_method;
     int *gpu_idx = parameter->gpu_idx;
     cudaStream_t *streams = parameter->streams;
     float partition_factor = parameter->partition_factor;
-    int partition_seed = paratition->partition_seed;
+    int partition_seed = parameter->partition_seed;
     bool g_stream_from_host = parameter->g_stream_from_host;
+    VertexId src = parameter->src[0];
     Value delta = parameter->delta;
     Value error = parameter->error;
     SizeT max_iter = parameter->max_iter;
     std::string traversal_mode = parameter->traversal_mode;
     bool instrument = parameter->instrumented;
+    bool size_check = parameter->size_check;
     bool debug = parameter->debug;
     size_t *org_size = new size_t[num_gpus];
 
-    util::Array1D<Value> *h_beliefs = new util::Array1D[graph->nodes];
+
+    Value *h_beliefs = new Value[graph->nodes];
     VertexId *h_node_id = new VertexId[graph->nodes];
 
     for (int gpu = 0; gpu < num_gpus; gpu++)
@@ -123,7 +126,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
                     NULL,
                     num_gpus,
                     gpu_idx,
-                    paratition_method,
+                    partition_method,
                     streams,
                     context,
                     max_queue_sizing,
@@ -142,7 +145,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             "BP Enactor Init failed", __FILE__, __LINE__
     );
 
-    CputTimer cpu_timer;
+    CpuTimer cpu_timer;
 
     util::GRError(
             problem->Reset(src, delta, error, max_iter,
@@ -168,7 +171,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             "BP Problem Data Extraction Failed", __FILE__, __LINE__
     );
 
-    output->node_value1 = (util::Array1D<Value>*)&h_beliefs[0];
+    output->node_value1 = (Value*)&h_beliefs[0];
     output->node_value2 = (VertexId *)&h_node_id[0];
 
     if (!quiet){
@@ -225,7 +228,7 @@ void dispatchBP(
                         }
                         case VALUE_FLOAT:
                         {
-                            Csr<int, int, int> csr(false);
+                            Csr<int, int, float> csr(false);
                             csr.nodes = graphi->num_nodes;
                             csr.edges = graphi->num_edges;
                             csr.row_offsets = (int*)graphi->row_offsets;
@@ -301,16 +304,17 @@ void gunrock_bp(
 }
 
 void bp(
-        int *node_ids,
-        util::Array1D<float> *beliefs,
+        float *final_beliefs,
         const int num_nodes,
         const int num_edges,
         const int *row_offsets,
         const int *col_indices,
+        const float *original_beliefs,
+        const float *joint_probabilities,
         bool normalized
 )
 {
-    struct GPTypes data_t;
+    struct GRTypes data_t;
     data_t.VTXID_TYPE = VTXID_INT;
     data_t.SIZET_TYPE = SIZET_INT;
     data_t.VALUE_TYPE = VALUE_FLOAT;
@@ -325,10 +329,11 @@ void bp(
     graphi->num_edges = num_edges;
     graphi->row_offsets = (void *)&row_offsets[0];
     graphi->col_indices = (void *)&col_indices[0];
+    graphi->node_value1 = (void *)&original_beliefs[0];
+    graphi->edge_values = (void *)&joint_probabilities[0];
 
     gunrock_bp(grapho, graphi, config, data_t);
-    memcpy(beliefs, (util::Array1D<float> *)grapho->node_value1, num_nodes * sizeof(util::Array1D));
-    memcpy(node_ids, (int *)grapho->node_value2, num_nodes * sizeof(int));
+    memcpy(final_beliefs, (float *)grapho->node_value1, num_nodes * sizeof(float));
 
     if (graphi) {
         free(graphi);

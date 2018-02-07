@@ -33,20 +33,15 @@ namespace gunrock {
                     const SizeT num_elements,
                     const VertexId* const keys,
                     const SizeT* const markers,
-                    const util::Array1D<SizeT, Value>* const belief_next,
-                    util::Array1D<SizeT, Value>* belief_curr
+                    const Value* const belief_next,
+                          Value* belief_curr
             ) {
                 const SizeT STRIDE = (SizeT)(gridDim.x * blockDim.x);
                 SizeT x = (SizeT)(blockIdx.x * blockDim.x + threadIdx.x);
                 while (x < num_elements) {
                     VertexId key = keys[x];
                     if (markers[key] == 1) {
-                        Value *curr_ptr, *next_ptr;
-                        for (int y = 0; y < belief_next->GetSize(); y++) {
-                            curr_ptr = belief_curr[key].GetPointer(util::DEVICE) + y;
-                            next_ptr = belief_next[key].GetPointer(util::DEVICE) + y;
-                            *curr_ptr = *next_ptr;
-                        }
+                        belief_curr[key] = belief_next[key];
                     }
                     x += STRIDE;
                 }
@@ -84,10 +79,10 @@ namespace gunrock {
                 const SizeT STRIDE = (SizeT)(gridDim.x * blockDim.x);
                 size_t offset = 0;
                 offset += sizeof(VertexId*) * NUM_VERTEX_ASSOCIATES;
-                util::Array1D<SizeT, Value>** s_value__associate_in = (util::Array1D<SizeT, Value>**)&(s_array[offset]);
+                Value* s_value__associate_in = (Value**)&(s_array[offset]);
                 offset += sizeof(Value*) * NUM_VALUE__ASSOCIATES;
                 offset += sizeof(VertexId*) * NUM_VERTEX_ASSOCIATES;
-                util::Array1D<SizeT, Value>** s_value__associate_org = (util::Array1D<SizeT, Value>**)&(s_array[offset]);
+                Value** s_value__associate_org = (Value**)&(s_array[offset]);
                 SizeT x = threadIdx.x;
                 while (x < array_size)
                 {
@@ -100,12 +95,8 @@ namespace gunrock {
                 while (x < num_elements)
                 {
                     VertexId key = keys_in[x];
-                    util::Array1D<SizeT, Value> mul_values = s_value__associate_in[0][x];
-                    for (int y = 0; y < mul_values.GetSize(); y++) {
-                        Value* mul_value_ptr = mul_values.GetPointer(util::DEVICE);
-                        Value* mul_addr = s_value__associate_org[0] + key + y;
-                        Value old_value = atomicMul(mul_addr, *mul_value_ptr);
-                    }
+                    Value mul_values_new = s_value__associate_in[0][x];
+                    Value old_value = atomicMul(s_value__associate_org[0] + key, mul_values_new);
                     //Value old_value = atomicMul(s_value__associate_org[0] + key, mul_value);
                     markers[key] = 1;
                     x += STRIDE;
@@ -117,8 +108,8 @@ namespace gunrock {
                     int thread_num,
                     typename KernelPolicy::SizeT num_elements,
                     typename KernelPolicy::VertexId *d_keys,
-                    util::Array1D<typename KernelPolicy::SizeT, typename KernelPolicy::Value> *d_belief_in,
-                    util::Array1D<typename KernelPolicy::SizeT, typename KernelPolicy::Value> *d_belief_out
+                    typename KernelPolicy::Value *d_belief_in,
+                    typename KernelPolicy::Value *d_belief_out
             ){
                 typedef typename KernelPolicy::VertexId VertexId;
                 typedef typename KernelPolicy::SizeT SizeT;
@@ -130,14 +121,8 @@ namespace gunrock {
                 while (x < num_elements)
                 {
                     VertexId key = d_keys[x];
-                    util::Array1D<SizeT, Value> in_values = d_belief_in[x];
-                    util::Array1D<SizeT, Value> out_values = d_belief_out[x];
-                    for (int y = 0; y < in_values.GetSize(); y++)
-                    {
-                        Value *mul_value_ptr = in_values.GetPointer(util::DEVICE) + y;
-                        Value *out_value_ptr = out_values.GetPointer(util::DEVICE) + key + y;
-                        Value old_value = atomicMul(out_value_ptr, *mul_value_ptr);
-                    }
+                    Value mul_value = d_belief_in[x];
+                    Value old_value = atomicMul(d_belief_out + key, mul_value);
                     x += STRIDE;
                 }
             };
@@ -198,8 +183,8 @@ namespace gunrock {
             __global__ void Assign_Values_BP (
                     const SizeT num_elements,
                     const VertexId* const keys_out,
-                    const util::Array1D<SizeT, Value>* const belief_next,
-                    const util::Array1D<SizeT, Value>* belief_out
+                    const Value* const belief_next,
+                    Value* belief_out
             ){
                 const SizeT STRIDE = (SizeT)(gridDim.x * blockDim.x);
                 SizeT x = (SizeT)(blockIdx.x * blockDim.x + threadIdx.x);
@@ -207,12 +192,7 @@ namespace gunrock {
                 while (x < num_elements)
                 {
                     VertexId key = keys_out[x];
-                    for (int y = 0; y < belief_out[x].GetSize() && y < belief_next[key].GetSize(); y++)
-                    {
-                        Value* out_value = belief_out[x].GetPointer(util::DEVICE) + y;
-                        Value* next_value = belief_next[key].GetPointer(util::DEVICE) + y;
-                        *out_value = *next_value;
-                    }
+                    belief_out[x] = belief_next[key];
                     x += STRIDE;
                 }
             };
@@ -221,49 +201,39 @@ namespace gunrock {
             __global__ void Expand_Incoming_Final (
                     const SizeT num_elements,
                     const VertexId* const keys_in,
-                    const util::Array1D<SizeT, Value>* const beliefs_in,
-                    util::Array1D<SizeT, Value>* beliefs_out
+                    Value* const beliefs_in,
+                    Value* beliefs_out
             )
             {
                 const SizeT STRIDE = (SizeT)(gridDim.x * blockDim.x);
                 SizeT x = (SizeT)(blockIdx.x * blockDim.x + threadIdx.x);
                 while (x < num_elements) {
                     VertexId key = keys_in[x];
-                    for (int y = 0; y < beliefs_in[x].GetSize() && y < beliefs_out[x].GetSize(); y++)
-                    {
-                        Value *in_value = beliefs_in[x].GetPointer(util::DEVICE) + y;
-                        Value *out_value = beliefs_out[x].GetPointer(util::DEVICE) + y;
-                        *out_value = *in_value;
-                    }
+                    beliefs_out[key] = beliefs_in[x];
                     x += STRIDE;
                 }
             };
 
-            template<typename VertexId, SizeT, Value>
+            template<typename VertexId, typename SizeT, typename Value>
             __global__ void Assign_Final_Value_Kernel(
-                    SizeT nuM_elements,
+                    SizeT num_elements,
                     VertexId *d_local_vertices,
-                    util::Array1D<SizeT, Value> *d_belief_current,
-                    util::Array1D<SizeT, Value> *d_belief_out
+                    Value *d_belief_current,
+                    Value *d_belief_out
             ){
                 const SizeT STRIDE = (SizeT)(gridDim.x * blockDim.x);
                 SizeT x = (SizeT)(blockIdx.x * blockDim.x + threadIdx.x);
-                while (x < nuM_elements)
+                while (x < num_elements)
                 {
                     VertexId key = d_local_vertices[x];
-                    util::Array1D<SizeT, Value> beliefs = d_belief_current[key];
-                    util::Array1D<SizeT, Value> *out;
-                    if(d_belief_out != NULL)
+                    Value belief = d_belief_current[key];
+                    if (d_belief_out != NULL)
                     {
-                        out = &(d_belief_out[x]);
+                        d_belief_out[x] = belief;
                     }
-                    else {
-                        out = &(d_belief_current[key]);
-                    }
-                    Value *out_value_out->GetPointer(util::DEVICE);
-                    for (int y = 0; y < beliefs.GetSize() && y < out->GetSize(); y++)
+                    else
                     {
-                        *(out_value_out + y) = *(beliefs.GetPointer(util::DEVICE) + y);
+                        d_belief_current[key] = belief;
                     }
                 }
             };
@@ -285,7 +255,7 @@ namespace gunrock {
                 typedef typename Enactor::Problem Problem;
                 typedef typename Problem::DataSlice DataSlice;
                 typedef GraphSlice<VertexId, SizeT, Value> GraphSliceT;
-                typedef BPFunctor<VertexId, Size, Value, Problem> BpFunctor;
+                typedef BPFunctor<VertexId, SizeT, Value, Problem> BpFunctor;
                 typedef BPMarkerFunctor<VertexId, SizeT, Value, Problem> BpMarkerFunctor;
                 typedef typename util::DoubleBuffer<VertexId, SizeT, Value> Frontier;
                 typedef IterationBase <AdvanceKernelPolicy, FilterKernelPolicy, Enactor,
@@ -334,10 +304,11 @@ namespace gunrock {
                             util::cpu_mt::PrintMessage("Filter start.",
                             thread_num, enactor_stats->iteration, peer_);
 
-                            gunrock::oprtr::filter::LaunchKernel<FilterKernelPolicy, Problem, BpFunctor>(
+                            gunrock::oprtr::filter::LaunchKernel
+                            <FilterKernelPolicy, Problem, BpFunctor>(
                                     enactor_stats[0],
                                     frontier_attribute[0],
-                                    typename BPFunctor::LabelT(),
+                                    typename BpFunctor::LabelT(),
                                     data_slice,
                                     d_data_slice,
                                     NULL,
@@ -370,16 +341,17 @@ namespace gunrock {
                                 return;
                             }
 
-                            util::MemsetKernel<<<240, 512, 0, stream>>>(
+                            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
+                                    data_slice->belief_curr.GetPointer(util::DEVICE),
                                     data_slice->belief_next.GetPointer(util::DEVICE),
-                                    NULL, graph_slice->nodes
+                                    data_slice->nodes
                             );
 
                             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream),
                             "cudaStreamSynchronize failed", __FILE__, __LINE__)) {
                                 return;
                             }
-                            data_slice->num_update_vertices = frontier_attribute->queue_length;
+                            data_slice->num_updated_vertices = frontier_attribute->queue_length;
                         }
 
                         frontier_attribute->queue_length = data_slice->local_vertices.GetSize();
@@ -392,11 +364,11 @@ namespace gunrock {
 
                         // Edge Map
                         frontier_attribute->queue_reset = false;
-                        gunrock::oprtr::LaunchKernel<AdvanceKernelPolicy, Problem, BpFunctor,
+                        gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, BpFunctor,
                                 gunrock::oprtr::advance::V2V>(
                             enactor_stats[0],
                             frontier_attribute[0],
-                            typename BPFunctor::LabelT(),
+                            typename BpFunctor::LabelT(),
                             data_slice,
                             d_data_slice,
                             (VertexId*)NULL,
@@ -495,7 +467,7 @@ namespace gunrock {
                             array,
                             data_slice->markers.GetPointer(util::DEVICE));
                     num_elements = 0;
-                };
+                }
 
                 template <int NUM_VERTEX_ASSOCIATES, int NUM_VALUE__ASSOCIATES>
                 static void Expand_Incoming(
@@ -508,10 +480,10 @@ namespace gunrock {
                         util::Array1D<SizeT, SizeT> &out_length,
                         util::Array1D<SizeT, VertexId> &keys_in,
                         util::Array1D<SizeT, VertexId> &vertex_associate_in,
-                        util::Array1D<SizeT, util::Array1D<SizeT, Value>> &value__associate_in,
+                        util::Array1D<SizeT, Value> &value__associate_in,
                         util::Array1D<SizeT, VertexId> &keys_out,
                         util::Array1D<SizeT, VertexId*> &vertex_associate_orgs,
-                        util::Array1D<SizeT, util::Array1D<SizeT, Value>*> &value__associate_orgs,
+                        util::Array1D<SizeT, Value*> &value__associate_orgs,
                         DataSlice  *h_data_slice,
                         EnactorStats<SizeT> *enactor_stats
                 ){
@@ -521,13 +493,13 @@ namespace gunrock {
                     }
                     Expand_Incoming_BP_Kernel<AdvanceKernelPolicy, NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES>
                     <<<num_blocks, AdvanceKernelPolicy::THREADS, 0, stream>>>
-                    (h_data_slice->gpu_dx,
+                    (h_data_slice->gpu_idx,
                     h_data_slice->in_counters[peer_],
                     h_data_slice->remote_vertices_in[peer_].GetPointer(util::DEVICE),
                     value__associate_in.GetPointer(util::DEVICE),
                     h_data_slice->belief_next.GetPointer(util::DEVICE)
                     );
-                };
+                }
 
                 /**
                  * @brief Iteration_Update_Preds function.
@@ -605,7 +577,7 @@ namespace gunrock {
                                 data_slice->value__associate_outs[peer_]
                         );
                     }
-                };
+                }
 
                 /**
                  * @brief Stop_Condition check function.
@@ -747,7 +719,7 @@ namespace gunrock {
                                 }
                             }
                             data_slice[0]->keys_outs[peer_] = data_slice[0]->keys_out[peer_].GetPointer(util::DEVICE);
-                            data_slice[0]->value__associate_outs[peer][0] = data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE);
+                            data_slice[0]->value__associate_outs[peer_][0] = data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE);
                             data_slice[0]->value__associate_outs[peer_].Move(util::HOST, util::DEVICE, -1, 0, stream);
 
                             Assign_Keys_BP<VertexId , SizeT>
@@ -778,7 +750,7 @@ namespace gunrock {
                     if (enactor_stats->retval = cudaStreamSynchronize(stream)) {
                         return;
                     }
-                };
+                }
             };
 
             template<typename AdvanceKernelPolicy, typename FilterKernelPolicy, typename Enactor>
@@ -849,11 +821,10 @@ namespace gunrock {
 
             template<typename _Problem>
             class BPEnactor :
-                public EnactorBase<typename _Problem::SizeT>
-            {
+                public EnactorBase<typename _Problem::SizeT> {
                 // Members
                 ThreadSlice *thread_slices;
-                CUTThread  *thread_Ids;
+                CUTThread *thread_Ids;
 
             public:
                 _Problem *problem;
@@ -882,24 +853,19 @@ namespace gunrock {
                                     instrument, debug, size_check),
                         thread_slices(NULL),
                         thread_Ids(NULL),
-                        problem(NULL)
-                {}
+                        problem(NULL) {}
 
                 /**
                  * @brief BPEnactor destructor
                  */
-                virtual ~BPEnactor()
-                {
+                virtual ~BPEnactor() {
                     Release();
                 }
 
-                cudaError_t Release()
-                {
+                cudaError_t Release() {
                     cudaError_t retval = cudaSuccess;
-                    if (thread_slices != NULL)
-                    {
-                        for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                        {
+                    if (thread_slices != NULL) {
+                        for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                             thread_slices[gpu].status = ThreadSlice::Status::ToKill;
                         }
                         cutWaitForThreads(thread_Ids, this->num_gpus);
@@ -955,40 +921,35 @@ namespace gunrock {
                     thread_slices = new ThreadSlice[this->num_gpus];
                     thread_Ids = new CUTThread[this->num_gpus];
 
-                    for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                    {
+                    for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                         thread_slices[gpu].thread_num = gpu;
-                        thread_slices[gpu].problem = (void*)problem;
-                        thread_slices[gpu].enactor = (void*)this;
+                        thread_slices[gpu].problem = (void *) problem;
+                        thread_slices[gpu].enactor = (void *) this;
                         thread_slices[gpu].context = &(context[gpu * this->num_gpus]);
                         thread_slices[gpu].status = ThreadSlice::Status::Inited;
                         thread_slices[gpu].thread_Id = cutStartThread(
-                                (CUT_THREADROUTINE)&(BPThread<
+                                (CUT_THREADROUTINE) &(BPThread<
                                         AdvanceKernelPolicy, FilterKernelPolicy, BPEnactor<Problem> >),
-                                (void *)&(thread_slices[gpu])
+                                (void *) &(thread_slices[gpu])
                         );
                         thread_Ids[gpu] = thread_slices[gpu].thread_Id;
                     }
 
-                    for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                    {
-                        while (thread_slices[gpu].status != ThreadSlice::Status::Idle)
-                        {
+                    for (int gpu = 0; gpu < this->num_gpus; gpu++) {
+                        while (thread_slices[gpu].status != ThreadSlice::Status::Idle) {
                             sleep(0);
                         }
                     }
                     return retval;
-                };
+                }
 
-                cudaError_t Extract()
-                {
+                cudaError_t Extract() {
                     cudaError_t retval = cudaSuccess;
                     typedef typename Problem::DataSlice DataSlice;
                     DataSlice *data_slice = NULL;
                     EnactorStats<SizeT> *enactor_stats = NULL;
                     int num_blocks = 0;
-                    for (int thread_num = 1; thread_num < this->num_gpus; thread_num++)
-                    {
+                    for (int thread_num = 1; thread_num < this->num_gpus; thread_num++) {
                         if (retval = util::SetDevice(this->gpu_idx[thread_num])) {
                             return retval;
                         }
@@ -1000,15 +961,16 @@ namespace gunrock {
                         if (num_blocks > 240) {
                             num_blocks = 240;
                         }
-                        Assign_Final_Value_Kernel <<<num_blocks, 512, 0, data_slice->streams[0]>>> (
+                        Assign_Final_Value_Kernel <<< num_blocks, 512, 0, data_slice->streams[0] >>> (
                                 data_slice->local_vertices.GetSize(),
-                                data_slice->local_vertices.GetPointer(util::DEVICE),
-                                data_slice->belief_curr.GetPointer(util::DEVICE),
-                                (thread_num == 0) ? (util::Array1D *)NULL : data_slice->value__associate_out[1].GetPointer(util::DEVICE)
-                                                                                                   );
+                                        data_slice->local_vertices.GetPointer(util::DEVICE),
+                                        data_slice->belief_curr.GetPointer(util::DEVICE),
+                                        (thread_num == 0) ? (Value*) NULL
+                                                          : data_slice->value__associate_out[1].GetPointer(util::DEVICE)
+                        );
 
                         enactor_stats->iteration = 0;
-                        PushNeighbor<Enactor, GraphSliceT, DataSlice, 0, 1> (
+                        PushNeighbor<Enactor, GraphSliceT, DataSlice, 0, 1>(
                                 this,
                                 thread_num,
                                 0,
@@ -1034,15 +996,14 @@ namespace gunrock {
                         num_blocks = 240;
                     }
 
-                    Assign_Final_Value_Kernel<<<num_blocks, 512, 0, data_slice->streams[0]>>>(
+                    Assign_Final_Value_Kernel << < num_blocks, 512, 0, data_slice->streams[0] >> > (
                             data_slice->local_vertices.GetSize(),
-                            data_slice->local_vertices.GetPointer(util::DEVICE),
-                            data_slice->belief_curr.GetPointer(util::DEVICE),
-                                    (util::Array1D *)NULL
+                                    data_slice->local_vertices.GetPointer(util::DEVICE),
+                                    data_slice->belief_curr.GetPointer(util::DEVICE),
+                                    (Value*) NULL
                     );
 
-                    for (int peer = 1; peer < this->num_gpus; peer++)
-                    {
+                    for (int peer = 1; peer < this->num_gpus; peer++) {
                         if (retval = util::GRError(
                                 cudaMemcpyAsync(data_slice->remote_vertices_in[peer].GetPointer(util::DEVICE)),
                                 problem->data_slices[peer]->local_vertices.GetPointer(util::HOST),
@@ -1054,32 +1015,32 @@ namespace gunrock {
                         }
                     }
 
-                    for (int peer = 1; peer < this->num_gpus; peer++)
-                    {
+                    for (int peer = 1; peer < this->num_gpus; peer++) {
                         int peer_iteration = this->enactor_stats[peer * this->num_gpus].iteration;
                         if (retval = util::GRError(
                                 cudaStreamWaitEvent(data_slice->streams[peer],
-                                problem->data_slices[peer]->events[peer_iteration % 4][0][0], 0),
+                                                    problem->data_slices[peer]->events[peer_iteration % 4][0][0], 0),
                                 "cudaStreamWaitEvent failed", __FILE__, __LINE__
                         )) {
                             return retval;
                         }
                         Expand_Incoming_Final<VertexId, SizeT, Value>
-                                <<<240, 512, 0, data_slice->streams[peer]>>> (
+                                << < 240, 512, 0, data_slice->streams[peer] >> > (
                                 problem->data_slices[peer]->local_vertices.GetSize(),
-                                data_slice->remote_vertices_in[peer].GetPointer(util::DEVICE),
-                                data_slice->value__assoicate_in[peer_iteration % 2][peer].GetPointer(util::DEVICE),
-                                data_slice->belief_curr.GetPointer(util::DEVICE));
+                                        data_slice->remote_vertices_in[peer].GetPointer(util::DEVICE),
+                                        data_slice->value__assoicate_in[peer_iteration % 2][peer].GetPointer(
+                                                util::DEVICE),
+                                        data_slice->belief_curr.GetPointer(util::DEVICE));
                         if (retval = util::GRError(
                                 cudaEventRecord(data_slice->events[enactor_stats->iteration % 4][peer][0],
-                                data_slice->streams[peer]),
+                                                data_slice->streams[peer]),
                                 "cudaEventRecord failed", __FILE__, __LINE__
                         )) {
                             return retval;
                         }
                         if (retval = util::GRError(
                                 cudaStreamWaitEvent(data_slice->streams[0],
-                                data_slice->events[enactor_stats->iteration % 4][peer][0], 0),
+                                                    data_slice->events[enactor_stats->iteration % 4][peer][0], 0),
                                 "cudaStreamWaitEvent failed", __FILE__, __LINE__
                         )) {
                             return retval;
@@ -1088,9 +1049,9 @@ namespace gunrock {
 
                     if (retval = data_slice->node_ids.Allocate(data_slice->nodes, util::DEVICE)) return retval;
                     if (retval = data_slice->temp_vertex.Allocate(data_slice->nodes, util::DEVICE)) return retval;
-                    util::MemsetIdxKernel<<<240, 512, 0, data_slice->streams[0]>>>(
+                    util::MemsetIdxKernel << < 240, 512, 0, data_slice->streams[0] >> > (
                             data_slice->node_ids.GetPointer(util::DEVICE),
-                            data_slice->nodes
+                                    data_slice->nodes
                     );
 
                     /*
@@ -1139,33 +1100,29 @@ namespace gunrock {
                  * @return cudaError_t object Indicates the success of all CUDA calls
                  */
                 template<typename AdvanceKernelPolicy, typename FilterKernelPolicy>
-                cudaError_t ResetBP()
-                {
+                cudaError_t ResetBP() {
                     cudaError_t retval = cudaSuccess;
                     if (retval = BaseEnactor::Reset()) {
                         return retval;
                     }
 
-                    for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                    {
+                    for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                         thread_slices[gpu].status = ThreadSlice::Status::Wait;
 
                         if (retval = util::SetDevice(problem->gpu_idx[gpu])) {
                             return retval;
                         }
 
-                        if (AdvanceKernelPolicy::ADVANCE_MODE == gunrock::oprtr::advance::TWC_FORWARD)
-                        {
+                        if (AdvanceKernelPolicy::ADVANCE_MODE == gunrock::oprtr::advance::TWC_FORWARD) {
                             // do nothing
-                        }
-                        else {
+                        } else {
                             bool over_sized = false;
                             if (retval = Check_Size<SizeT, SizeT>(
                                     this->size_check, "scanned edges",
                                     problem->data_slices[gpu]->local_vertices.GetSize() + 2,
                                     problem->data_slices[gpu]->scanned_edges,
                                     over_sized, -1, -1, -1, false
-                            )){
+                            )) {
                                 return retval;
                             }
                             this->frontier_attribute[gpu * this->num_gpus].queue_length =
@@ -1177,8 +1134,8 @@ namespace gunrock {
                                     this->frontier_attribute + gpu * this->num_gpus,
                                     problem->graph_slices[gpu]->row_offsets.GetPointer(util::DEVICE),
                                     problem->graph_slices[gpu]->column_indices.GetPointer(util::DEVICE),
-                                    (SizeT *)NULL,
-                                    (VertexId *)NULL,
+                                    (SizeT *) NULL,
+                                    (VertexId *) NULL,
                                     problem->data_slices[gpu]->local_vertices.GetPointer(util::DEVICE),
                                     problem->data_slices[gpu]->scanned_edges[0].GetPointer(util::DEVICE),
                                     problem->data_slices[gpu]->nodes,
@@ -1191,40 +1148,36 @@ namespace gunrock {
                             );
 
                             if (retval = this->frontier_attribute[gpu * this->num_gpus].output_length.Move(util::DEVICE,
-                                                                                                           util::HOST, 1, 0, problem->data_slices[gpu]->streams[0])) {
+                                                                                                           util::HOST,
+                                                                                                           1, 0,
+                                                                                                           problem->data_slices[gpu]->streams[0])) {
                                 return retval;
                             }
 
                             if (retval = util::GRError(cudaStreamSynchronize(problem->data_slices[gpu]->streams[0]),
-                                "cudaStreamSynchronize failed", __FILE__, __LINE__
+                                                       "cudaStreamSynchronize failed", __FILE__, __LINE__
                             )) {
                                 return retval;
                             }
                         }
                     }
                     return retval;
-                };
+                }
 
-                template<AdvancedKernelPolicy, FilterKernelPolicy>
-                cudaError_t EnactBP()
-                {
+                template<typename AdvancedKernelPolicy, typename FilterKernelPolicy>
+                cudaError_t EnactBP() {
                     cudaError_t retval = cudaSuccess;
-                    for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                    {
+                    for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                         thread_slices[gpu].status = ThreadSlice::Status::Running;
                     }
-                    for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                    {
-                        while (thread_slices[gpu].status != ThreadSlice::Status::Idle)
-                        {
+                    for (int gpu = 0; gpu < this->num_gpus; gpu++) {
+                        while (thread_slices[gpu].status != ThreadSlice::Status::Idle) {
                             sleep(0);
                         }
                     }
 
-                    for (int gpu = 0; gpu < this->num_gpus * this->num_gpus; gpu ++)
-                    {
-                        if (this->enactor_stats[gpu].retval != cudaSuccess)
-                        {
+                    for (int gpu = 0; gpu < this->num_gpus * this->num_gpus; gpu++) {
+                        if (this->enactor_stats[gpu].retval != cudaSuccess) {
                             retval = this->enactor_stats[gpu].retval;
                             return retval;
                         }
@@ -1235,212 +1188,199 @@ namespace gunrock {
                     }
 
                     return retval;
+                }
+
+                typedef gunrock::oprtr::filter::KernelPolicy<
+                        Problem, // Problem data type
+                        300, // CUDA ARCH,
+                        // INSTRUMENT, // INSTRUMENT
+                        0, // SATURATION QUIT
+                        true, // DEQUEUE_PROBLEM_SIZE,
+                        sizeof(VertexId) == 4 ? 8 : 4, // MIN_CTA_OCCUPANCY
+                        8, // LOG_THREADS
+                        1, // LOG_LOAD_VEC_SIZE
+                        0, // LOG LOADS_PER_TILE
+                        5, // LOG RAKING THREADS
+                        5, // END BITMASK CULL
+                        8, // LOG SCHEDULE GRANULARITY
+                        gunrock::oprtr::filter::BY_PASS>
+                        FilterKernelPolicy;
+
+                typedef gunrock::oprtr::advance::KernelPolicy<
+                        Problem, // Problem data type
+                        300, // CUDA ARCH
+                        1, // MIN CTA OCCUPANCY
+                        10, // LOG THREADS
+                        8, // LOG BLOCKS
+                        32 * 128, // LIGHT EDGE THRESHOLD (used for partitioned advance mode)
+                        1, // LOG LOAD VEC SIZE
+                        0, // LOG LOADS PER TILE
+                        5, // LOG RAKING THREADS
+                        32, // WARP GATHER THRESHOLD
+                        128 * 4, // CTA GATHER THRESHOLD
+                        7, //LOG SCHEDULE GRANULARITY
+                        gunrock::oprtr::advance::LB>
+                        LB_AdvanceKernelPolicy;
+
+                typedef gunrock::oprtr::advance::KernelPolicy<
+                        Problem, // Problem data type
+                        300, // CUDA ARCH
+                        1, // MIN CTA OCCUPANCY
+                        10, // LOG THREADS
+                        8, // LOG BLOCKS
+                        32 * 128, // LIGHT_EDGE_THRESHOLD (used for partitioned advanced mode)
+                        1, // LOG LOAD VEC SIZE
+                        0, // LOG LOADS PER TILE
+                        5, // LOG RAKING THREADS
+                        32, // WARP GATHER THRESHOLD
+                        128 * 4, // CTA GATHER THRESHOLD
+                        7, // LOG SCHEDULE GRANULARITY
+                        gunrock::oprtr::advance::LB_LIGHT>
+                        LB_LIGHT_AdvanceKernelPolicy;
+
+                typedef gunrock::oprtr::advance::KernelPolicy<
+                        Problem, // Problem data type
+                        300, // CUDA ARCH
+                        1, // MIN CTA OCCUPANCY
+                        7, // LOG THREADS
+                        8, // LOG BLOCKS
+                        32 * 128, // LIGHT EDGE THRESHOLD (used for partitioned advance mode)
+                        1, // LOG LOAD VEC SIZE
+                        1, // LOG LOADS PER TILE
+                        5, // LOG RAKING THREADS
+                        32, // WARP GATHER THRESHOLD
+                        128 * 4, // CTA GATHER THRESHOLD
+                        7, // CTA GATHER THRESHOLD
+                        gunrock::oprtr::advance::TWC_FORWARD>
+                        TWC_AdvanceKernelPolicy;
+
+                template<typename Dummy, typename gunrock::oprtr::advance::MODE A_MODE>
+                struct MODE_SWITCH {
                 };
-            };
 
-            typedef gunrock::oprtr::filter::KernelPolicy<
-                    Problem, // Problem data type
-                    300, // CUDA ARCH,
-                    // INSTRUMENT, // INSTRUMENT
-                    0, // SATURATION QUIT
-                    true, // DEQUEUE_PROBLEM_SIZE,
-                    sizeof(VertexId) == 4 ? 8 : 4, // MIN_CTA_OCCUPANCY
-                    8, // LOG_THREADS
-                    1, // LOG_LOAD_VEC_SIZE
-                    0, // LOG LOADS_PER_TILE
-                    5, // LOG RAKING THREADS
-                    5, // END BITMASK CULL
-                    8, // LOG SCHEDULE GRANULARITY
-                    gunrock::oprtr::filter::BY_PASS>
-            FilterKernelPolicy;
+                template<typename Dummy>
+                struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::LB> {
+                    static cudaError_t Enact(Enactor &enactor) {
+                        return enactor.EnactBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
 
-            typedef gunrock::oprtr::advance::KernelPolicy<
-                    Problem, // Problem data type
-                    300, // CUDA ARCH
-                    1, // MIN CTA OCCUPANCY
-                    10, // LOG THREADS
-                    8, // LOG BLOCKS
-                    32 * 128, // LIGHT EDGE THRESHOLD (used for partitioned advance mode)
-                    1, // LOG LOAD VEC SIZE
-                    0, // LOG LOADS PER TILE
-                    5, // LOG RAKING THREADS
-                    32, // WARP GATHER THRESHOLD
-                    128 * 4, // CTA GATHER THRESHOLD
-                    7, //LOG SCHEDULE GRANULARITY
-                    gunrock::oprtr::advance::LB>
-            LB_AdvanceKernelPolicy;
+                    static cudaError_t
+                    Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512) {
+                        return enactor.InitBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>(context, problem,
+                                                                                          max_grid_size);
+                    }
 
-            typedef gunrock::oprtr::advance::KernelPolicy<
-                    Problem, // Problem data type
-                    300, // CUDA ARCH
-                    1, // MIN CTA OCCUPANCY
-                    10, // LOG THREADS
-                    8, // LOG BLOCKS
-                    32 * 128, // LIGHT_EDGE_THRESHOLD (used for partitioned advanced mode)
-                    1, // LOG LOAD VEC SIZE
-                    0, // LOG LOADS PER TILE
-                    5, // LOG RAKING THREADS
-                    32, // WARP GATHER THRESHOLD
-                    128 * 4, // CTA GATHER THRESHOLD
-                    7, // LOG SCHEDULE GRANULARITY
-                    gunrock::oprtr::advance::LB_LIGHT>
-            LB_LIGHT_AdvanceKernelPolicy;
+                    static cudaError_t Reset(Enactor &enactor) {
+                        return enactor.ResetBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
+                };
 
-            typedef gunrock::oprtr::advance::KernelPolicy<
-                    Problem, // Problem data type
-                    300, // CUDA ARCH
-                    1, // MIN CTA OCCUPANCY
-                    7, // LOG THREADS
-                    8, // LOG BLOCKS
-                    32 * 128, // LIGHT EDGE THRESHOLD (used for partitioned advance mode)
-                    1, // LOG LOAD VEC SIZE
-                    1, // LOG LOADS PER TILE
-                    5, // LOG RAKING THREADS
-                    32, // WARP GATHER THRESHOLD
-                    128 * 4, // CTA GATHER THRESHOLD
-                    7, // CTA GATHER THRESHOLD
-                    gunrock::oprtr::advance::TWC_FORWARD>
-            TWC_AdvanceKernelPolicy;
+                template<typename Dummy>
+                struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::LB_LIGHT> {
+                    static cudaError_t Enact(Enactor &enactor) {
+                        return enactor.EnactBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
 
-            template<typename Dummy, typename gunrock::oprtr::advance::MODE A_MODE>
-            struct MODE_SWITCH {};
+                    static cudaError_t
+                    Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512) {
+                        return enactor.InitBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>
+                                (context, problem, max_grid_size);
+                    }
 
-            template<typename Dummy>
-            struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::LB>
-            {
-                static cudaError_t Enact(Enactor &enactor)
-                {
-                    return enactor.EnactBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    static cudaError_t Reset(Enactor &enactor) {
+                        return enactor.ResetBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
+                };
+
+                template<typename Dummy>
+                struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::TWC_FORWARD> {
+                    static cudaError_t Enact(Enactor &enactor) {
+                        return enactor.EnactBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
+
+                    static cudaError_t
+                    Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512) {
+                        return enactor.InitBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>
+                                (context, problem, max_grid_size);
+                    }
+
+                    static cudaError_t Reset(Enactor &enactor) {
+                        return enactor.ResetBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    }
+                };
+
+
+                /**
+                 * @brief BP Enact kernel entry
+                 *
+                 * @param[in] traversal_mode Load-balanced or Dynamic cooperative
+                 *
+                 * @return cudaError_t object Indicates the success of all CUDA calls
+                 */
+                cudaError_t Enact(
+                        std::string traversal_mode = "LB"
+                ) {
+                    if (this->min_sm_version >= 300) {
+                        if (traversal_mode == "LB") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
+                        } else if (traversal_mode == "LB_LIGHT") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
+                        } else if (traversal_mode == "TWC") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
+                        }
+                    }
+                    printf("Not yet tuned for this architecture\n");
+                    return cudaErrorInvalidDeviceFunction;
                 }
 
-                static cudaError_t Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512)
-                {
-                    return enactor.InitBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>(context, problem, max_grid_size);
+                cudaError_t Reset(std::string traversal_mode = "LB") {
+                    if (this->min_sm_version >= 300) {
+                        if (traversal_mode == "LB") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
+                        } else if (traversal_mode == "LB_LIGHT") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
+                        } else if (traversal_mode == "TWC") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
+                        }
+                    }
+                        printf("Not yet tuned for this architecture\n");
+                        return cudaErrorInvalidDeviceFunction;
                 }
 
-                static cudaError_t Reset(Enactor &enactor)
-                {
-                    return enactor.ResetBP<LB_AdvanceKernelPolicy, FilterKernelPolicy>();
-                }
-            };
+                /**
+                 * @brief BP Enact kernel entry
+                 *
+                 * @param[in] context CudaContext pointer for ModernGPU API
+                 * @param[in] problem Pointer to Problem object
+                 * @param[in] traversal_mode Load-balanced or Dynamic coordination
+                 * @param[in] max_grid_size Maximum grid size for kernel calls
+                 *
+                 * @return cudaError_t object Indicates the success of all CUDA calls
+                 */
+                cudaError_t Init(
+                        ContextPtr *context,
+                        Problem *problem,
+                        std::string traversal_mode = "LB",
+                        int max_grid_size = 512
+                ) {
+                    if (this->min_sm_version >= 300) {
+                        if (traversal_mode == "LB") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Init(*this, context, problem,
+                                                                                         max_grid_size);
+                        } else if (traversal_mode == "LB_LIGHT") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Init(*this, context, problem,
+                                                                                               max_grid_size);
+                        } else if (traversal_mode == "TWC") {
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Init(*this, context,
+                                                                                                  problem,
+                                                                                                  max_grid_size);
+                        }
+                    }
 
-            template<typename Dummy>
-            struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::LB_LIGHT>
-            {
-                static cudaError_t Enact(Enactor &enactor)
-                {
-                    return enactor.EnactBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>();
-                }
-
-                static cudaError_t Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512)
-                {
-                    return enactor.InitBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>
-                            (context, problem, max_grid_size);
-                }
-
-                static cudaError_t Reset(Enactor &enactor)
-                {
-                    return enactor.ResetBP<LB_LIGHT_AdvanceKernelPolicy, FilterKernelPolicy>();
-                }
-            };
-
-            template<typename Dummy>
-            struct MODE_SWITCH<Dummy, gunrock::oprtr::advance::TWC_FORWARD>
-            {
-                static cudaError_t Enact(Enactor &enactor)
-                {
-                    return enactor.EnactBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>();
-                }
-
-                static cudaError_t Init(Enactor &enactor, ContextPtr *context, Problem *problem, int max_grid_size = 512)
-                {
-                    return enactor.InitBP<TWC_AdvnaceKernelPolicy, FilterKernelPolicy>
-                            (context, problem, max_grid_size);
-                }
-
-                static cudaError_t Reset(Enactor &enactor)
-                {
-                    return enactor.ResetBP<TWC_AdvanceKernelPolicy, FilterKernelPolicy>();
+                    printf("Not yet tuned for this architecture\n");
+                    return cudaErrorInvalidDeviceFunction;
                 }
             };
-
-
-            /**
-             * @brief BP Enact kernel entry
-             *
-             * @param[in] traversal_mode Load-balanced or Dynamic cooperative
-             *
-             * @return cudaError_t object Indicates the success of all CUDA calls
-             */
-            cudaError_t Enact(
-                    std::string traversal_mode = "LB"
-            )
-            {
-                if (this->min_sm_version >= 300)
-                {
-                    if (traversal_mode == "LB") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
-                    }
-                    else if (traversal_mode == "LB_LIGHT") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
-                    }
-                    else if (traversal_mode == "TWC") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
-                    }
-                }
-                printf("Not yet tuned for this architecture\n");
-                return cudaErrorInvalidDeviceFunction;
-            }
-
-            cudaError_t Reset(std::string traversal_mode = "LB") {
-                if (this->min_sm_version >= 300)
-                {
-                    if (traversal_mode == "LB") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
-                    }
-                    else if (traversal_mode == "LB_LIGHT")
-                    {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
-                    }
-                    else if (traversal_mode == "TWC")
-                    {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
-                    }
-                }
-            }
-
-            /**
-             * @brief BP Enact kernel entry
-             *
-             * @param[in] context CudaContext pointer for ModernGPU API
-             * @param[in] problem Pointer to Problem object
-             * @param[in] traversal_mode Load-balanced or Dynamic coordination
-             * @param[in] max_grid_size Maximum grid size for kernel calls
-             *
-             * @return cudaError_t object Indicates the success of all CUDA calls
-             */
-            cudaError_t Init(
-                    ContextPtr *context,
-                    Problem *problem,
-                    std:string traversal_mode = "LB",
-                    int max_grid_size = 512
-            )
-            {
-                if (this->min_sm_version >= 300) {
-                    if (traversal_mode == "LB") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Init(*this, context, problem, max_grid_size);
-                    }
-                    else if (traversal_mode == "LB_LIGHT") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Init(*this, context, problem, max_grid_size);
-                    }
-                    else if (traversal_mode == "TWC") {
-                        return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Init(*this, context, problem, max_grid_size);
-                    }
-                }
-
-                printf("Not yet tuned for this architecture\n");
-                return cudaErrorInvalidDeviceFunction;
-            }
         }
     }
 }
