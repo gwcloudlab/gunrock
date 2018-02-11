@@ -28,45 +28,20 @@ public:
     float delta; // delta value for BP
     float error; // error threshold for BP
     int max_iter; // maximum number of iterations for BP
-    bool normalized;
 
     BP_Parameter()
     {
         delta = 0.85f;
         error = 0.01f;
         max_iter = 50;
-        normalized = false;
     }
 
     ~BP_Parameter() {}
 };
 
 
-template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
-void runBP(GRGraph *output, BP_Parameter *parameter);
-
-/**
- * @brief Run test
- *
- * @tparam VertexId Vertex identifier type
- * @tparam SizeT Graph size type
- * @tparam Value Attribute type
- *
- * @param output Pointer to output graph structure of the problem
- * @param parameter primitive-specific test parameters
- */
 template <typename VertexId, typename SizeT, typename Value>
-void normalizedBP(GRGraph *output, BP_Parameter *parameter)
-{
-    if (parameter->normalized)
-    {
-        runBP<VertexId, SizeT, Value, true> (output, parameter);
-    }
-    else
-    {
-        runBP<VertexId, SizeT, Value, false> (output, parameter);
-    }
-};
+void runBP(GRGraph *output, BP_Parameter *parameter);
 
 /**
  * @brief Run test
@@ -109,7 +84,6 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
 
 
     Value *h_beliefs = new Value[graph->nodes];
-    VertexId *h_node_id = new VertexId[graph->nodes];
 
     for (int gpu = 0; gpu < num_gpus; gpu++)
     {
@@ -118,7 +92,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
         cudaMemGetInfo(&(org_size[gpu]), &dummy);
     }
 
-    Problem *problem = new Problem(false); // Allocate problem on GPU
+    Problem *problem = new Problem(); // Allocate problem on GPU
     util::GRError(
             problem->Init(
                     g_stream_from_host,
