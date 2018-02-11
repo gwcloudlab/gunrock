@@ -233,6 +233,8 @@ void dispatchBP(
                             csr.edges = graphi->num_edges;
                             csr.row_offsets = (int*)graphi->row_offsets;
                             csr.column_indices = (int*)graphi->col_indices;
+                            csr.node_values = (float*)graphi->node_value1;
+                            csr.edge_values = (float*)graphi->edge_values;
                             parameter->graph = &csr;
 
                             normalizedBP<int, int, float>(grapho, parameter);
@@ -240,6 +242,8 @@ void dispatchBP(
                             // rest for free memory
                             csr.row_offsets = NULL;
                             csr.column_indices = NULL;
+                            csr.node_values = NULL;
+                            csr.edge_values = NULL;
                             break;
                         }
                     }

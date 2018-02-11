@@ -245,7 +245,7 @@ endif (CUDA_VERBOSE_PTXAS)
 # end /* Configure GUNROCK build options */
 
 # c++11 is required
-set(CUDA_NVCC_FLAGS -std=c++11)
+set(CUDA_NVCC_FLAGS -std=c++11 --device-debug)
 
 if(GUNROCK_BUILD_LIB)
   if(GUNROCK_BUILD_SHARED_LIBS)

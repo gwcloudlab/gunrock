@@ -86,7 +86,10 @@ namespace gunrock {
                                   max_iter(0),
                                   num_updated_vertices(0),
                                   final_event_set(false),
-                                  d_data_slice(NULL) {
+                                  d_data_slice(NULL),
+                                  remote_vertices_in(NULL),
+                                  remote_vertices_out(NULL)
+                    {
                         belief_curr.SetName("belief_curr");
                         belief_next.SetName("belief_next");
                         joint_probabilities.SetName("joint_probabilities");
@@ -118,22 +121,18 @@ namespace gunrock {
                         if (retval = cub_sort_storage.Release()) return retval;
                         if (retval = temp_vertex.Release()) return retval;
 
-                        if (remote_vertices_in != NULL) {
-                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                        if (remote_vertices_in != NULL)
+                        {
+                            for (int peer = 0; peer < this -> num_gpus; peer++)
                                 if (retval = remote_vertices_in[peer].Release()) return retval;
-                                delete[] remote_vertices_in;
-                                remote_vertices_in = NULL;
-                            }
+                            delete[] remote_vertices_in; remote_vertices_in = NULL;
                         }
-
-                        if (remote_vertices_out != NULL) {
-                            for (int peer = 0; peer < this->num_gpus; peer++) {
+                        if (remote_vertices_out != NULL)
+                        {
+                            for (int peer = 0; peer < this -> num_gpus; peer++)
                                 if (retval = remote_vertices_out[peer].Release()) return retval;
-                                delete[] remote_vertices_out;
-                                remote_vertices_out = NULL;
-                            }
+                            delete[] remote_vertices_out; remote_vertices_out = NULL;
                         }
-
                         return retval;
                     }
 

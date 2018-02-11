@@ -1322,11 +1322,11 @@ namespace gunrock {
                 ) {
                     if (this->min_sm_version >= 300) {
                         if (traversal_mode == "LB") {
-                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Reset(*this);
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB>::Enact(*this);
                         } else if (traversal_mode == "LB_LIGHT") {
-                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Reset(*this);
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT>::Enact(*this);
                         } else if (traversal_mode == "TWC") {
-                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Reset(*this);
+                            return MODE_SWITCH<SizeT, gunrock::oprtr::advance::TWC_FORWARD>::Enact(*this);
                         }
                     }
                     printf("Not yet tuned for this architecture\n");
