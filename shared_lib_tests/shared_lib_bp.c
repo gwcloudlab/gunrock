@@ -34,15 +34,17 @@ int main(int argc, char* argv[])
     graphi->row_offsets = (void*)&row_offsets[0];
     graphi->col_indices = (void*)&col_indices[0];
     graphi->edge_values = (void*)&edge_values[0];
-    graphi->node_value1 = (void*)&node_values;
+    graphi->node_value1 = (void*)&node_values[0];
 
     gunrock_bp(grapho, graphi, config, data_t);
 
     ////////////////////////////////////////////////////////////////////////////
     float *beliefs = (float*)malloc(sizeof(float) * graphi->num_nodes);
-    beliefs = (float*)grapho->node_value1;
-    int node; for (node = 0; node < graphi->num_nodes; ++node)
-        printf("Node_ID [%d] : Label [%f]\n", node, beliefs[node]);
+    memcpy(beliefs, grapho->node_value1, graphi->num_nodes);
+    int node;
+    for (node = 0; node < graphi->num_nodes; ++node) {
+        printf("Belief [%.10e]\n", beliefs[node]);
+    }
 
     if (graphi) free(graphi);
     if (grapho) free(grapho);

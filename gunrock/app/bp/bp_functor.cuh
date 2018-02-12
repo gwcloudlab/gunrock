@@ -91,10 +91,9 @@ template<
             Value joint_belief;
             util::io::ModifiedLoad<Problem::COLUMN_READ_MODIFIER>::Ld(joint_belief,
                                                                       d_data_slice->joint_probabilities + edge_id);
-
-            float mul_value = joint_belief * src_belief;
+            Value mul_value = joint_belief * src_belief;
             if (isfinite(mul_value)) {
-                float old_value = atomicMul(d_data_slice->belief_next + d_id, mul_value);
+                Value old_value = atomicMul(d_data_slice->belief_next + d_id, mul_value);
             }
         }
 
@@ -127,8 +126,9 @@ template<
             }
             Value new_beliefs = d_data_slice->belief_next[node];
             Value curr_beliefs = d_data_slice->belief_curr[node];
-            if (!isfinite(new_beliefs)) {
-                new_beliefs = 0.0;
+            // handle overflow
+            if (!isfinite(new_beliefs) || new_beliefs > 1.0f || new_beliefs < 0.0f ) {
+                return false;
             }
             d_data_slice->belief_curr[node] = new_beliefs;
             return (fabs(new_beliefs - curr_beliefs) > (d_data_slice->threshold * curr_beliefs));

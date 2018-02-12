@@ -144,7 +144,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             "BP Problem Data Extraction Failed", __FILE__, __LINE__
     );
 
-    output->node_value1 = (Value*)&h_beliefs[0];
+    output->node_value1 = h_beliefs;
 
     if (!quiet){
         printf("  GPU BP finished in %lf msec.\n", elapsed);

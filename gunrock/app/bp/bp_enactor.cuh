@@ -60,13 +60,11 @@ __global__ void Expand_Incoming_Kernel(
             bool to_process = true;
             SizeT output_pos = util::InvalidValue<SizeT>();
             VertexId key = util::InvalidValue<VertexId>();
-            Value value;
 
             if (x < num_elements)
             {
-                value = d_value__associate_in[x];
-                key = d_keys_in[x];
-                Value old_value = atomicMul(d_beliefs_next + key, value);
+                Value value = d_value__associate_in[x];
+                to_process = value < 1 && value > 0;
                 // try to decide whether to process element
             } else to_process = false;
 

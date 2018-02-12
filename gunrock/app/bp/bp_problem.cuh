@@ -316,7 +316,7 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                 }
             }
 
-            // Allocate output distances if necessary
+            // Allocate output beliefs and joint probabilities if necessary
             if (this->belief_curr.GetPointer(util::DEVICE) == NULL) {
                 if (retval = this->belief_curr.Allocate(nodes, util::DEVICE)) return retval;
                 // copy data

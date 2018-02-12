@@ -142,7 +142,7 @@ __device__ static __forceinline__ float atomicMul(float *address, float val)
     do {
         assumed = old;
         old = atomicCAS(address_as_int, assumed, __float_as_int(
-                val * __float_as_int(assumed)
+                val * __int_as_float(assumed)
         ));
     } while (assumed != old);
     return __int_as_float(old);
