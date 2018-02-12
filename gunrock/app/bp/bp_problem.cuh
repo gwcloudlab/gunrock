@@ -26,17 +26,16 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
     static const int MAX_NUM_VALUE__ASSOCIATES = 1;
 
     typedef ProblemBase <VertexId, SizeT, Value,
-            MARK_PREDECESSORS, ENABLE_IDEMPOTENCE> BaseProblem;
+    MARK_PREDECESSORS, ENABLE_IDEMPOTENCE> BaseProblem;
     typedef DataSliceBase <VertexId, SizeT, Value,
-            MAX_NUM_VERTEX_ASSOCIATES, MAX_NUM_VALUE__ASSOCIATES> BaseDataSlice;
+    MAX_NUM_VERTEX_ASSOCIATES, MAX_NUM_VALUE__ASSOCIATES> BaseDataSlice;
     typedef unsigned char MaskT;
 
-    struct DataSlice : BaseDataSlice
-    {
+    struct DataSlice : BaseDataSlice {
         // device storage arrays
-        util::Array1D<SizeT, Value> belief_curr;
-        util::Array1D<SizeT, Value> belief_next;
-        util::Array1D<SizeT, Value> joint_probabilities;
+        util::Array1D <SizeT, Value> belief_curr;
+        util::Array1D <SizeT, Value> belief_next;
+        util::Array1D <SizeT, Value> joint_probabilities;
         Value threshold;
         Value delta;
         SizeT max_iter;
@@ -48,8 +47,7 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
         DataSlice() : BaseDataSlice(),
                       threshold(0),
                       delta(0),
-                      max_iter(0)
-        {
+                      max_iter(0) {
             belief_curr.SetName("belief_curr");
             belief_next.SetName("belief_next");
             joint_probabilities.SetName("joint_probabilities");
@@ -58,19 +56,18 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
         /**
          * @brief Default destructor
          */
-        virtual ~DataSlice()
-        {
+        virtual ~DataSlice() {
             Release();
         }
 
-        cudaError_t Release()
-        {
-            cudaSuccess_t retval = cudaSuccess;
+        cudaError_t Release() {
+            cudaError_t retval = cudaSuccess;
             if (retval = util::SetDevice(this->gpu_idx)) return retval;
             if (retval = BaseDataSlice::Release()) return retval;
             if (retval = belief_curr.Release()) return retval;
             if (retval = belief_next.Release()) return retval;
             if (retval = joint_probabilities.Release()) return retval;
+            return retval;
         }
 
         /**
@@ -80,32 +77,30 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
          *
          * @return cudaError_t object Indicates the success of all CUDA calls
          */
-        cudaError_t Extract(Value *h_beliefs)
-        {
+        cudaError_t Extract(Value *h_beliefs) {
             cudaError_t retval = cudaSuccess;
 
-            if (this->num_gpus == 1)
-            {
+            if (this->num_gpus == 1) {
                 // Set device
                 if (retval == util::SetDevice(this->gpu_idx[0])) return retval;
 
                 data_slices[0]->belief_curr.SetPointer(h_beliefs);
                 if (retval = data_slices[0]->belief_curr.Move(util::DEVICE, util::HOST)) return retval;
-            } else{
-                Value **th_beliefs = new Value*[this->num_gpus];
+            } else {
+                Value * *th_beliefs = new
+                Value *[this->num_gpus];
                 for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                     if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
                     if (retval = data_slices[gpu]->belief_curr.Move(util::DEVICE, util::HOST)) return retval;
                     th_beliefs[gpu] = data_slices[gpu]->belief_curr.GetPoint(util::HOST);
                 }
 
-                for (VertexId node = 0; node < this->nodes; node++)
-                {
+                for (VertexId node = 0; node < this->nodes; node++) {
                     if (this->partition_tables[0][node] >= 0 && this->partition_tables[0][node] < this->num_gpus &&
-                        this->convertion_tables[0][node] >= 0 && this->convertion_tables[0][node] < data_slices[this->partition_tables[0][node]]->belief_curr.GetSize())
-                    {
+                        this->convertion_tables[0][node] >= 0 && this->convertion_tables[0][node] <
+                                                                 data_slices[this->partition_tables[0][node]]->belief_curr.GetSize()) {
                         h_beliefs[node] = th_beliefs[this->partition_tables[0][node]][this->convertion_tables[0][node]];
-                    } else{
+                    } else {
                         printf("OutOfBound: node = %d, partition = %d, convertion = %d\n",
                                node, this->partition_tables[0][node], this->convertion_tables[0][node]);
                         //data_slices[this->partition_tables[0][node]]->distance.GetSize());
@@ -113,13 +108,14 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                     }
                 }
 
-                for (int gpu = 0; gpu < this->num_gpus; gpu++)
-                {
+                for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                     if (retval = data_slices[gpu]->belief_curr.Release(util::HOST)) return retval;
                     if (retval = data_slices[gpu]->belief_next.Release(util::HOST)) return retval;
                     if (retval = data_slices[gpu]->joint_probabilities(util::HOST)) return retval;
                 }
-                delete[] th_beliefs; th_beliefs = NULL;
+                delete[]
+                th_beliefs;
+                th_beliefs = NULL;
             }
 
             return retval;
@@ -146,16 +142,19 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                 int num_gpus,
                 int gpu_idx,
                 bool use_double_buffer,
-                Csr<VertexId, SizeT, Value> *graph,
-                GraphSlice<VertexId, SizeT, Value> *graph_slice,
+                Csr <VertexId, SizeT, Value> *graph,
+                GraphSlice <VertexId, SizeT, Value> *graph_slice,
                 SizeT *num_in_nodes,
                 SizeT *num_out_nodes,
                 float queue_sizing = 2.0,
-                float in_sizing = 1.0,
-                bool skip_makeout_selection = false,
-                bool keep_node_num = false)
+
+        float in_sizing = 1.0,
+                bool
+        skip_makeout_selection = false,
+                bool keep_node_num = false
+        )
         {
-            cudaSuccess_t retval = cudaSuccess;
+            cudaError_t retval = cudaSuccess;
 
             if (retval = BaseDataSlice::Init(
                     num_gpus,
@@ -166,7 +165,7 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                     num_out_nodes,
                     in_sizing,
                     skip_makeout_selection
-            )){
+            )) {
                 return retval;
             }
 
@@ -185,8 +184,7 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
             // labels is required
             if (retval = this->labels.Allocate(graph->nodes, util::DEVICE)) return retval;
 
-            if (num_gpus > 1)
-            {
+            if (num_gpus > 1) {
                 this->value__associate_orgs[0] = belief_curr.GetPointer(util::DEVICE);
                 if (retval = this->value__associate_orgs.Move(util::HOST, util::DEVICE)) return retval;
             }
@@ -209,38 +207,40 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                 Value threshold,
                 SizeT max_iter,
                 FrontierType frontier_type,
-                GraphSlice<VertexId, SizeT, Value>  *graph_slice,
+                GraphSlice <VertexId, SizeT, Value> *graph_slice,
                 double queue_sizing = 2.0,
-        double queue_sizing1 = -1.0)
+
+        double queue_sizing1 = -1.0
+        )
         {
             cudaError_t retval = cudaSuccess;
-            SizeT nodes = graph_slice -> nodes;
-            SizeT edges = graph_slice -> edges;
-            SizeT new_frontier_elements[2] = {0,0};
-            if (queue_sizing1 < 0){
+            SizeT nodes = graph_slice->nodes;
+            SizeT edges = graph_slice->edges;
+            SizeT new_frontier_elements[2] = {0, 0};
+            if (queue_sizing1 < 0) {
                 queue_sizing1 = queue_sizing;
             }
 
-            for (int gpu = 0; gpu < this -> num_gpus; gpu++) {
+            for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                 this->wait_marker[gpu] = 0;
             }
-            for (int i=0; i<4; i++) {
+            for (int i = 0; i < 4; i++) {
                 for (int gpu = 0; gpu < this->num_gpus * 2; gpu++) {
                     for (int stage = 0; stage < this->num_stages; stage++) {
                         this->events_set[i][gpu][stage] = false;
                     }
                 }
             }
-            for (int gpu = 0; gpu < this -> num_gpus; gpu++) {
+            for (int gpu = 0; gpu < this->num_gpus; gpu++) {
                 for (int i = 0; i < 2; i++) {
                     this->in_length[i][gpu] = 0;
                 }
             }
-            for (int peer=0; peer<this->num_gpus; peer++) {
+            for (int peer = 0; peer < this->num_gpus; peer++) {
                 this->out_length[peer] = 1;
             }
 
-            for (int peer=0;peer<(this->num_gpus > 1 ? this->num_gpus+1 : 1);peer++) {
+            for (int peer = 0; peer < (this->num_gpus > 1 ? this->num_gpus + 1 : 1); peer++) {
                 for (int i = 0; i < 2; i++) {
                     double queue_sizing_ = i == 0 ? queue_sizing : queue_sizing1;
                     switch (frontier_type) {
@@ -329,13 +329,13 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
                 if (retval = this->belief_next.Move(util::HOST, util::DEVICE)) return retval;
             }
 
-            if (this->joint_probabilities.GetPoint(util::DEVICE) == NULL) {
-                if (retval = this->joint_probabilities.Allocate(edges, util::DEVICE)) retval;
+            if (this->joint_probabilities.GetPointer(util::DEVICE) == NULL) {
+                if (retval = this->joint_probabilities.Allocate(edges, util::DEVICE)) return retval;
                 // copy data
                 if (retval = this->joint_probabilities.Move(util::HOST, util::DEVICE)) return retval;
             }
 
-            if (this -> labels    .GetPointer(util::DEVICE) == NULL) {
+            if (this->labels.GetPointer(util::DEVICE) == NULL) {
                 if (retval = this->labels.Allocate(nodes, util::DEVICE)) return retval;
             }
 
@@ -344,8 +344,8 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
             this->max_iter = max_iter;
 
 
-            util::MemsetKernel<<<128, 128>>>(
-                    this -> labels .GetPointer(util::DEVICE),
+            util::MemsetKernel << < 128, 128 >> > (
+                    this->labels.GetPointer(util::DEVICE),
                             util::InvalidValue<VertexId>(),
                             nodes);
 
@@ -355,6 +355,208 @@ struct BPProblem: ProblemBase<VertexId, SizeT, Value,
         }
     };
 
+    // Members
+    util::Array1D <SizeT, DataSlice> *data_slices;
+
+    // Methods
+    BPProblem() : BaseProblem(
+            false, // use double buffer
+            false, // enable_backward
+            false, // keep_order
+            true, // keep_node_num
+            false, // skip_makeout_selection
+            true) // unified receive
+    {
+        data_slices = NULL;
+    }
+
+    virtual ~BPProblem() {
+        Release();
+    }
+
+    cudaError_t Release() {
+        cudaError_t retval = cudaSuccess;
+        if (data_slices == NULL) return retval;
+        for (int i = 0; i < this->num_gpus; ++i) {
+            if (retval = util::SetDevice(this->gpu_idx[i])) return retval;
+            if (retval = data_slices[i].Release()) return retval;
+        }
+        delete[] data_slices; data_slices = NULL;
+        if (retval = BaseProblem::Release()) return retval;
+        return retval;
+    }
+
+    /**
+     * @addtogroup PublicInterface
+     */
+
+    /**
+     * @brief Copy result beliefs computed on the GPU back to host-side vectors
+     *
+     * @param[out] h_beliefs host-side vector to store computed beliefs
+     * @return cudaError_t object Indicates the success of all CUDA calls.
+     */
+    cudaError_t Extract(Value *h_beliefs)
+    {
+        cudaError_t  retval = cudaSuccess;
+
+        if (this->num_gpus == 1)
+        {
+            // Set device
+            if (retval = util::SetDevice(this->gpu_idx[0])) return retval;
+
+            data_slices[0]->belief_curr.SetPointer(h_beliefs);
+            if (retval = data_slices[0]->belief_curr.Move(util::DEVICE, util::HOST)) return retval;
+        }
+        else {
+            Value **th_beliefs = new Value*[this->num_gpus];
+            for (int gpu = 0; gpu < this->num_gpus; gpu++)
+            {
+                if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
+                if (retval = data_slices[gpu]->belief_curr.Move(util::DEVICE, util::HOST)) return retval;
+                th_beliefs[gpu] = data_slices[gpu]->belief_curr.GetPointer(util::HOST);
+            }
+
+            for (VertexId node = 0; node < this->nodes; node++) {
+                if (this->partition_tables[0][node] >= 0 && this->partition_tables[0][node] < this->num_gpus &&
+                        this->convertion_tables[0][node] >= 0 && this->convertion_tables[0][node] < data_slices[this->partition_tables[0][node]]->belief_curr.GetSize())
+                {
+                    h_beliefs[node] = th_beliefs[this->partition_tables[0][node]][this->convertion_tables[0][node]];
+                }
+                else {
+                    printf("OutOfBound: node = %d, partition = %d, convertion = %d\n",
+                           node, this->partition_tables[0][node], this->convertion_tables[0][node]);
+                    //data_slices[this->partition_tables[0][node]]->distance.GetSize());
+                    fflush(stdout);
+                }
+            }
+
+            for (int gpu = 0; gpu < this->num_gpus; gpu++)
+            {
+                if (retval = data_slices[gpu]->belief_curr.Release(util::HOST)) return retval;
+                if (retval = data_slices[gpu]->belief_next.Release(util::HOST)) return retval;
+                if (retval = data_slices[gpu]->joint_probabilities.Release(util::HOST)) return retval;
+            }
+            delete[] th_beliefs; th_beliefs = NULL;
+        }
+        return retval;
+    }
+
+
+    /**
+     * @brief initialization function.
+     *
+     * @param[in] stream_from_host Whether to stream data from host.
+     * @param[in] graph Pointer to the CSR graph object we process on. @see Csr
+     * @param[in] inversegraph Pointer to the inversed CSR graph object we process on.
+     * @param[in] num_gpus Number of the GPUs used.
+     * @param[in] gpu_idx GPU index used for testing.
+     * @param[in] partition_method Partition method to partition input graph.
+     * @param[in] streams CUDA stream.
+     * @param[in] queue_sizing Maximum queue sizing factor.
+     * @param[in] in_sizing
+     * @param[in] partition_factor Partition factor for partitioner.
+     * @param[in] partition_seed Partition seed used for partitioner.
+     *
+     * @return cudaError_t object Indicates the success of all CUDA calls.
+     */
+    cudaError_t Init(
+            bool stream_from_host,
+            Csr<VertexId, SizeT, Value> *graph,
+            Csr<VertexId, SizeT, Value> *inversegraph = NULL,
+            int num_gpus = 1,
+            int *gpu_idx = NULL,
+            std::string partition_method = "random",
+            cudaStream_t *streams = NULL,
+            float queue_sizing = 2.0,
+            float in_sizing = 1.0,
+            float partition_factor = -1.0,
+            int partition_seed = -1
+    )
+    {
+        cudaError_t retval = cudaSuccess;
+        if (retval = BaseProblem::Init(
+                stream_from_host,
+                graph,
+                inversegraph,
+                num_gpus,
+                gpu_idx,
+                partition_method,
+                queue_sizing,
+                partition_factor,
+                partition_seed
+        ))
+        {
+            return retval;
+        }
+
+        // No data in DataSlice needs to be copied from host
+
+        data_slices = new util::Array1D<SizeT, DataSlice>[this->num_gpus];
+
+        for (int gpu = 0; gpu < this->num_gpus; gpu++)
+        {
+            data_slices[gpu].SetName("data_slices[]");
+            if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
+            if (retval = data_slices[gpu].Allocate(1, util::DEVICE | util::HOST)) return retval;
+            DataSlice* _data_slice = data_slices[gpu].GetPointer(util::HOST);
+            _data_slice->streams.SetPointer(&streams[gpu * num_gpus * 2], num_gpus*2);
+
+            if (retval = _data_slice->Init(
+                    this->num_gpus,
+                    this->gpu_idx[gpu],
+                    this->use_double_buffer,
+                    &(this->sub_graphs[gpu]),
+                    this->graph_slices[gpu],
+                    this->num_gpus > 1 ? this->graph_slices[gpu]->in_counter.GetPointer(util::HOST) : NULL,
+                    this->num_gpus > 1 ? this->graph_slices[gpu]->out_counter.GetPointer(util::HOST) : NULL,
+                    queue_sizing,
+                    in_sizing,
+                    this->skip_makeout_selection,
+                    this->keep_node_num
+            ))
+            {
+                return retval;
+            }
+        }
+
+        return retval;
+    }
+
+    /**
+    * @brief Reset problem function. Must be called prior to each run.
+    *
+    * @param[in] frontier_type The frontier type (i.e., edge/vertex/mixed).
+    * @param[in] queue_sizing Size scaling factor for work queue allocation (e.g., 1.0 creates n-element and m-element vertex and edge frontiers, respectively).
+    * @param[in] queue_sizing1
+    *
+    *  \return cudaError_t object Indicates the success of all CUDA calls.
+    */
+    cudaError_t Reset(
+            Value delta,
+            Value threshold,
+            SizeT max_iter,
+            FrontierType frontier_type,
+            double queue_sizing,
+            double queue_sizing1 = -1)
+    {
+
+        cudaError_t retval = cudaSuccess;
+        if (queue_sizing1 < 0) queue_sizing1 = queue_sizing;
+
+        for (int gpu = 0; gpu < this->num_gpus; ++gpu) {
+            // Set device
+            if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
+            if (retval = data_slices[gpu] -> Reset(
+                    delta, threshold, max_iter,
+                    frontier_type, this->graph_slices[gpu],
+                    queue_sizing, queue_sizing1)) return retval;
+            if (retval = data_slices[gpu].Move(util::HOST, util::DEVICE)) return retval;
+        }
+
+        // Fillin the initial input_queue for Sample problem
+        return retval;
+    }
 };
 
 

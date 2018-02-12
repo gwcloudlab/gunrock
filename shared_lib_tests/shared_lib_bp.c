@@ -39,8 +39,8 @@ int main(int argc, char* argv[])
     gunrock_bp(grapho, graphi, config, data_t);
 
     ////////////////////////////////////////////////////////////////////////////
-    float *beliefs = (int*)malloc(sizeof(int) * graphi->num_nodes);
-    beliefs = (int*)grapho->node_value1;
+    float *beliefs = (float*)malloc(sizeof(float) * graphi->num_nodes);
+    beliefs = (float*)grapho->node_value1;
     int node; for (node = 0; node < graphi->num_nodes; ++node)
         printf("Node_ID [%d] : Label [%f]\n", node, beliefs[node]);
 

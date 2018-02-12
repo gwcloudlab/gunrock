@@ -53,10 +53,10 @@ void runBP(GRGraph *output, BP_Parameter *parameter);
  * @param output
  * @param parameter
  */
-template <typename VertexId, typename SizeT, typename Value, bool NORMALIZED>
+template <typename VertexId, typename SizeT, typename Value>
 void runBP(GRGraph *output, BP_Parameter *parameter)
 {
-    typedef BPProblem <VertexId, SizeT, Value, NORMALIZED> Problem;
+    typedef BPProblem <VertexId, SizeT, Value> Problem;
     typedef BPEnactor < Problem> Enactor;
 
     Csr<VertexId, SizeT, Value> *graph = (Csr<VertexId, SizeT, Value>*)parameter->graph;
@@ -102,7 +102,6 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
                     gpu_idx,
                     partition_method,
                     streams,
-                    context,
                     max_queue_sizing,
                     max_in_sizing,
                     partition_factor,
@@ -115,14 +114,14 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
             num_gpus, gpu_idx, instrument, debug, size_check
     );
     util::GRError(
-            enactor->Init(context, problem, traversal_mode, max_grid_size),
+            enactor->Init(context, problem, max_grid_size),
             "BP Enactor Init failed", __FILE__, __LINE__
     );
 
     CpuTimer cpu_timer;
 
     util::GRError(
-            problem->Reset(src, delta, error, max_iter,
+            problem->Reset(delta, error, max_iter,
                 enactor->GetFrontierType(), max_queue_sizing
             ),
             "BP Problem Data Reset Failed", __FILE__, __LINE__
@@ -133,7 +132,7 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
 
     cpu_timer.Start();
     util::GRError(
-            enactor->Enact(traversal_mode), "BP Problem Enact Failed", __FILE__, __LINE__
+            enactor->Enact(src, traversal_mode), "BP Problem Enact Failed", __FILE__, __LINE__
     );
     cpu_timer.Stop();
 
@@ -141,12 +140,11 @@ void runBP(GRGraph *output, BP_Parameter *parameter)
 
     // Copy out results
     util::GRError(
-            problem->Extract(h_beliefs, h_node_id),
+            problem->Extract(h_beliefs),
             "BP Problem Data Extraction Failed", __FILE__, __LINE__
     );
 
     output->node_value1 = (Value*)&h_beliefs[0];
-    output->node_value2 = (VertexId *)&h_node_id[0];
 
     if (!quiet){
         printf("  GPU BP finished in %lf msec.\n", elapsed);
@@ -178,7 +176,6 @@ void dispatchBP(
     parameter->delta = config->bp_delta;
     parameter->error = config->bp_error;
     parameter->max_iter = config->max_iters;
-    parameter->normalized = config->bp_normalized;
     parameter->g_undirected = false;
 
     switch (data_t.VTXID_TYPE)
@@ -211,7 +208,7 @@ void dispatchBP(
                             csr.edge_values = (float*)graphi->edge_values;
                             parameter->graph = &csr;
 
-                            normalizedBP<int, int, float>(grapho, parameter);
+                            runBP<int, int, float>(grapho, parameter);
 
                             // rest for free memory
                             csr.row_offsets = NULL;
@@ -288,8 +285,7 @@ void bp(
         const int *row_offsets,
         const int *col_indices,
         const float *original_beliefs,
-        const float *joint_probabilities,
-        bool normalized
+        const float *joint_probabilities
 )
 {
     struct GRTypes data_t;
@@ -298,7 +294,6 @@ void bp(
     data_t.VALUE_TYPE = VALUE_FLOAT;
 
     struct GRSetup *config = InitSetup(1, NULL); // primitive-specific configures
-    config->bp_normalized = normalized;
 
     struct GRGraph *grapho = (struct GRGraph*)malloc(sizeof(struct GRGraph));
     struct GRGraph *graphi = (struct GRGraph*)malloc(sizeof(struct GRGraph));

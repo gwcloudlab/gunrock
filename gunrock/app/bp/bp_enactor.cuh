@@ -45,6 +45,11 @@ __global__ void Expand_Incoming_Kernel(
     typename KernelPolicy::Value    *d_joint_probabilities,
     typename KernelPolicy::VertexId *d_labels)
     {
+        typedef typename KernelPolicy::VertexId VertexId;
+        typedef typename KernelPolicy::SizeT SizeT;
+        typedef typename KernelPolicy::Value Value;
+        typedef util::Block_Scan<SizeT, KernelPolicy::CUDA_ARCH, KernelPolicy::LOG_THREADS> BlockScanT;
+
         __shared__ typename BlockScanT::Temp_Space scan_space;
         __shared__ SizeT block_offset;
         SizeT x = (SizeT)blockIdx.x * blockDim.x + threadIdx.x;
@@ -92,33 +97,23 @@ template<
     typename AdvanceKernelPolicy,
     typename FilterKernelPolicy,
     typename Enactor>
-struct BpIteration: public IterationBase<
-        AdvacneKernelPolicy, FilterKernelPolicy, Enactor,
+struct BPIteration: public IterationBase<
+        AdvanceKernelPolicy, FilterKernelPolicy, Enactor,
         false, // HAS_SUBQ
         true, // HAS_FULLQ
         false, // BACKWARD
         true, // FORWARD
         false > // whether to mark predecessors
 {
-    typedef typename Enactor
-    ::SizeT SizeT;
-    typedef typename Enactor
-    ::Value Value;
-    typedef typename Enactor
-    ::VertexId VertexId;
-    typedef typename Enactor
-    ::Problem Problem;
-    typedef typename Problem
-    ::DataSlice DataSlice;
-    typedef GraphSlice <VertexId, SizeT, Value>
-            GraphSliceT;
-    typedef typename util
-    ::DoubleBuffer <VertexId, SizeT, Value>
-            Frontier;
-    typedef SampleFunctor <VertexId, SizeT, Value, Problem>
-            Functor;
-    typedef typename Functor
-    ::LabelT LabelT;
+    typedef typename Enactor::SizeT SizeT;
+    typedef typename Enactor::Value Value;
+    typedef typename Enactor::VertexId VertexId;
+    typedef typename Enactor::Problem Problem;
+    typedef typename Problem::DataSlice DataSlice;
+    typedef GraphSlice <VertexId, SizeT, Value> GraphSliceT;
+    typedef typename util::DoubleBuffer <VertexId, SizeT, Value> Frontier;
+    typedef BPFunctor <VertexId, SizeT, Value, Problem> Functor;
+    typedef typename Functor::LabelT LabelT;
     typedef IterationBase <
     AdvanceKernelPolicy, FilterKernelPolicy, Enactor,
     false, true, false, true, false>//MARK_PREDECESSORS
@@ -540,7 +535,7 @@ template <
 typename AdvanceKernelPolicy,
         typename FilterKernelPolicy,
         typename Enactor>
-static CUT_THREADPROC SSSPThread(
+static CUT_THREADPROC BPThread(
         void * thread_data_)
 {
     typedef typename Enactor::Problem    Problem   ;
@@ -549,7 +544,7 @@ static CUT_THREADPROC SSSPThread(
     typedef typename Enactor::Value      Value     ;
     typedef typename Problem::DataSlice  DataSlice ;
     typedef GraphSlice <VertexId, SizeT, Value>          GraphSliceT;
-    typedef BpFunctor<VertexId, SizeT, Value, Problem> Functor;
+    typedef BPFunctor<VertexId, SizeT, Value, Problem> Functor;
 
     ThreadSlice  *thread_data        =  (ThreadSlice*) thread_data_;
     Problem      *problem            =  (Problem*)     thread_data -> problem;
@@ -591,10 +586,10 @@ static CUT_THREADPROC SSSPThread(
 
         gunrock::app::Iteration_Loop
         <Enactor, Functor,
-                SSSPIteration<AdvanceKernelPolicy, FilterKernelPolicy, Enactor>,
-                Problem::MARK_PATHS ? 1:0, 1>
+                BPIteration<AdvanceKernelPolicy, FilterKernelPolicy, Enactor>,
+                0, 1>
                                            (thread_data);
-        //printf("SSSP_Thread finished\n");fflush(stdout);
+        //printf("BP_Thread finished\n");fflush(stdout);
         thread_data -> status = ThreadSlice::Status::Idle;
     }
 
@@ -613,7 +608,7 @@ static CUT_THREADPROC SSSPThread(
  * @tparam _SIZE_CHECK Whether or not to enable size check.
  */
 template <typename _Problem/*, bool _INSTRUMENT, bool _DEBUG, bool _SIZE_CHECK*/>
-class BpEnactor :
+class BPEnactor :
     public EnactorBase<typename _Problem::SizeT/*, _DEBUG, _SIZE_CHECK*/>
     {
         ThreadSlice  *thread_slices;// = new ThreadSlice [this->num_gpus];
@@ -626,12 +621,12 @@ class BpEnactor :
         typedef typename Problem::VertexId VertexId;
         typedef typename Problem::Value    Value   ;
         typedef EnactorBase<SizeT>         BaseEnactor;
-        typedef BpEnactor<Problem>       Enactor;
+        typedef BPEnactor<Problem>       Enactor;
 
         /**
          * @brief BpEnactor constructor
          */
-        BpEnactor(
+        BPEnactor(
         int   num_gpus   = 1,
         int  *gpu_idx    = NULL,
         bool  instrument = false,
@@ -647,9 +642,9 @@ class BpEnactor :
         }
 
         /**
-         * @brief BpEnactor destructor
+         * @brief BPEnactor destructor
          */
-        virtual ~BpEnactor()
+        virtual ~BPEnactor()
         {
             Release();
         }
@@ -722,9 +717,9 @@ class BpEnactor :
                 thread_slices[gpu].context       = &(context[gpu*this->num_gpus]);
                 thread_slices[gpu].status        = ThreadSlice::Status::Inited;
                 thread_slices[gpu].thread_Id     = cutStartThread(
-                        (CUT_THREADROUTINE)&(BpThread<
+                        (CUT_THREADROUTINE)&(BPThread<
                                              AdvanceKernelPolicy, FilterKernelPolicy,
-                                SSSPEnactor<Problem> >),
+                                BPEnactor<Problem> >),
                         (void*)&(thread_slices[gpu]));
                 thread_Ids[gpu] = thread_slices[gpu].thread_Id;
             }
@@ -1050,7 +1045,7 @@ class BpEnactor :
                 else if (traversal_mode == "LB_LIGHT_CULL")
                     return MODE_SWITCH<SizeT, gunrock::oprtr::advance::LB_LIGHT_CULL>
                                               ::Init(*this, context, problem, max_grid_size);
-                else printf("Traversal_mode %s is undefined for SSSP\n", traversal_mode.c_str());
+                else printf("Traversal_mode %s is undefined for BP\n", traversal_mode.c_str());
             }
 
             //to reduce compile time, get rid of other architecture for now
