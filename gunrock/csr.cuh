@@ -450,8 +450,10 @@ struct Csr
         out_nodes = out_node;
     }
 
+
+
     /**
-     * @brief (Specific for SM) Read from stored row_offsets, column_indices arrays.
+     * @brief (Specific for BP) Read from stored row_offsets, column_indices arrays.
      *
      * @tparam LOAD_NODE_VALUES Whether or not to load node values.
      *
@@ -459,8 +461,8 @@ struct Csr
      * @param[in] f_label Input label file name.
      * @param[in] quiet Don't print out anything.
      */
-    template <bool LOAD_NODE_VALUES>
-    void FromCsr_SM(char *f_in, char *f_label, bool quiet = false)
+    template <bool LOAD_EDGE_VALUES, bool LOAD_NODE_VALUES>
+    void FromCsr_BP(char *f_in, char *f_label, bool quiet = false)
     {
         if (!quiet)
         {
@@ -477,15 +479,19 @@ struct Csr
         input.read(reinterpret_cast<char*>(&v), sizeof(SizeT));
         input.read(reinterpret_cast<char*>(&e), sizeof(SizeT));
 
-        FromScratch<false, LOAD_NODE_VALUES>(v, e);
+        FromScratch<LOAD_NODE_VALUES, LOAD_NODE_VALUES>(v, e);
 
         input.read(reinterpret_cast<char*>(row_offsets), (v + 1)*sizeof(SizeT));
         input.read(reinterpret_cast<char*>(column_indices), e * sizeof(VertexId));
+        if (LOAD_EDGE_VALUES)
+        {
+            input.read(reinterpret_cast<char*>(edge_values), e * sizeof(Value));
+        }
         if (LOAD_NODE_VALUES)
         {
             input_label.read(reinterpret_cast<char*>(node_values), v * sizeof(Value));
         }
-	    for(int i=0; i<v; i++) printf("%lld ", (long long)node_values[i]); printf("\n");
+	    for(int i=0; i<v; i++) printf("%lf ", (long long)node_values[i]); printf("\n");
 
         time_t mark2 = time(NULL);
         if (!quiet)
@@ -515,6 +521,34 @@ struct Csr
 	    if(!quiet) printf("  Converting the labels of %lld vertices to binary format...\n", 
 				(long long)nodes);
 	    if(LOAD_NODE_VALUES) WriteBinary_SM(output_file, nodes, labels);
+    }
+
+    template<bool LOAD_NODE_VALUES>
+    void FromLabels_BP(
+        char *output_file,
+        Value *labels,
+        SizeT nodes,
+        bool quiet = false
+    ) {
+        if(pinned) {
+            int flags = cudaHostAllocMapped;
+            if (gunrock::util::GRError(
+                    cudaHostAlloc((void **)&node_values,
+                                  sizeof(Value) * nodes, flags),
+                    "Csr cudaHostAlloc node_values failed",
+                    __FILE__, __LINE__))
+                exit(1);
+        }
+        else {
+            node_values = (LOAD_NODE_VALUES) ?
+                          (Value*) malloc(sizeof(Value) * nodes) : NULL;
+        }
+        if(LOAD_NODE_VALUES) {
+            for(int i = 0; i < nodes; ++i) {
+                node_values[i] = labels[i];
+            }
+        }
+        FromLabels<LOAD_NODE_VALUES>(output_file, labels, nodes, quiet);
     }
 
     /**
