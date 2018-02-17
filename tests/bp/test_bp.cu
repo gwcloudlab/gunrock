@@ -9,6 +9,7 @@
 #include <deque>
 #include <vector>
 #include <iostream>
+#include <fstream>
 
 #include <time.h>
 
@@ -19,8 +20,7 @@
 #include <moderngpu.cuh>
 
 
-int main(int argc, char** argv)
-{
+int RunBP(std::string in_edges_filename, std::string in_nodes_filename, std::string out_filename) {
     clock_t start, end;
     double time_elapsed;
 
@@ -29,7 +29,7 @@ int main(int argc, char** argv)
     typedef int SizeT;
 
     gunrock::Csr<VertexId, SizeT , Value> csr(false);
-    if(gunrock::graphio::BuildMarketGraph_BP<true, VertexId, SizeT, Value>("/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.edges.mtx", "/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.nodes.mtx", csr, false, false, false) != 0) {
+    if(gunrock::graphio::BuildMarketGraph_BP<true, VertexId, SizeT, Value>((char *)in_edges_filename.c_str(), (char *)in_nodes_filename.c_str(), csr, false, false, false) != 0) {
         perror("Unable to build csr...exiting\n");
         return 1;
     }
@@ -59,8 +59,14 @@ int main(int argc, char** argv)
     end = clock();
     time_elapsed = (double)(end - start)/(CLOCKS_PER_SEC);
 
+    std::ofstream out;
+    out.open(out_filename.c_str());
+
     printf("Nodes\tEdges\tTime(s)\n");
+    out << "Nodes,Edges,Time(s)" << std::endl;
     printf("%d\t%d\t%.6f\n", csr.nodes, csr.edges, time_elapsed);
+    out << csr.nodes << "," << csr.edges << "," << time_elapsed << std::endl;
+    out.close();
 
     float *beliefs = new float[graphi->num_nodes];
     memcpy(beliefs, grapho->node_value1, graphi->num_nodes);
@@ -76,8 +82,16 @@ int main(int argc, char** argv)
         delete grapho;
     }
     if(beliefs) {
-        delete beliefs;
+        delete[] beliefs;
     }
+
+    return 0;
+}
+
+int main(int argc, char** argv)
+{
+
+    RunBP("/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.edges.mtx", "/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.nodes.mtx", "gunrock_bp.csv");
 
     return 0;
 }

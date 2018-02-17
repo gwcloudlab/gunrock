@@ -195,17 +195,17 @@ def write_mtx_nodes_header(mtx, args):
     mtx.write("{:d}\t{:d}\n".format(args.nodes, args.nodes))
 
 
-
 def generate_file(args):
     random.seed(args.seed)
 
     temp_file = "{}.mtx.tmp".format(args.file)
+    out_xml = "{}.xml".format(args.file)
     mtx_nodes_file = "{}.nodes.mtx".format(args.file)
     mtx_edges_file = "{}.edges.mtx".format(args.file)
 
     num_arcs_written = 0
 
-    with open(args.file, 'w') as f:
+    with open(out_xml, 'w') as f:
         with open(temp_file, 'w') as mtx_edges:
             with open(mtx_nodes_file, 'w') as mtx_nodes:
                 # write header

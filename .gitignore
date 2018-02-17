@@ -15,6 +15,7 @@
 # Ignore graph dataset files
 *.graph
 *.mtx*
+*.xml*
 
 # Ignore vim undo file
 *.un~
