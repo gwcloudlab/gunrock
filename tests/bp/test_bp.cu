@@ -64,7 +64,7 @@ int RunBP(std::string in_edges_filename, std::string in_nodes_filename, std::str
     printf("Nodes\tEdges\tTime(s)\n");
     out << "Nodes,Edges,Time(s)" << std::endl;
     printf("%d\t%d\t%.6f\n", csr.nodes, csr.edges, time_elapsed);
-    out << out_filename << "," << csr.nodes << "," << csr.edges << "," << -1 << "," << config->max_iters << "," << time_elapsed << std::endl;
+    out << in_nodes_filename << "," << csr.nodes << "," << csr.edges << "," << -1 << "," << 1 << "," << time_elapsed << std::endl;
     out.flush();
 
     float *beliefs = new float[graphi->num_nodes];
@@ -97,14 +97,17 @@ int main(int argc, char** argv)
     out << "File Name,Propagation Type,Number of Nodes,Number of Edges,Diameter,Number of Iterations,BP Run Time(s)" << std::endl;
 
     //RunBP("/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.edges.mtx", "/home/mjt5v/Source_Code/gunrock/tests/bp/test.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/10_20.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/10_20.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/100_200.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/100_200.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/1000_2000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/1000_2000.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/10000_20000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/10000_20000.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/100000_200000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/100000_200000.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/200000_400000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/200000_400000.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/400000_800000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/400000_800000.bif.nodes.mtx", out_filename, out);
-    RunBP("/home/trotsky/gunrock_benchmark_files/800000_1600000.bif.edges.mtx", "/home/trotsky/gunrock_benchmark_files/800000_1600000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/10_20.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/10_20.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/100_200.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/100_200.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/1000_2000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/1000_2000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/10000_20000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/10000_20000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/100000_200000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/100000_200000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/200000_400000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/200000_400000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/400000_800000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/400000_800000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/800000_1600000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/800000_1600000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/1000000_2000000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/1000000_2000000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/2000000_4000000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/2000000_4000000.bif.nodes.mtx", out_filename, out);
+    RunBP("/home/mjt5v/Desktop/gunrock_benchmark_files/4000000_8000000.bif.edges.mtx", "/home/mjt5v/Desktop/gunrock_benchmark_files/4000000_8000000.bif.nodes.mtx", out_filename, out);
 
     out.close();
 
